@@ -100,7 +100,7 @@ class PassiveUnlockService : Service() {
             val channel = NotificationChannel(
                 CHANNEL_ID, "Digital Key", NotificationManager.IMPORTANCE_LOW
             ).apply { description = "Passive proximity unlock active" }
-            getSystemService(NotificationManager::class.java).createNotificationChannel(channel)
+            getSystemService(NotificationManager::class.java)?.createNotificationChannel(channel)
         }
     }
 

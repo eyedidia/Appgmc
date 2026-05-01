@@ -79,7 +79,7 @@ class SettingsFragment : Fragment() {
 
     private fun requestBatteryOptimizationExemption() {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M) return
-        val pm = requireContext().getSystemService(PowerManager::class.java)
+        val pm = requireContext().getSystemService(PowerManager::class.java) ?: return
         val pkg = requireContext().packageName
         if (pm.isIgnoringBatteryOptimizations(pkg)) return
         startActivity(Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS).apply {
