@@ -19,13 +19,6 @@ jobs:
           java-version: '17'
           distribution: 'temurin'
 
-      - name: Install Gradle 8.6
-        run: |
-          wget -q "https://services.gradle.org/distributions/gradle-8.6-bin.zip" \
-            -O /tmp/gradle.zip
-          unzip -q /tmp/gradle.zip -d /opt/gradle-ci
-          echo "/opt/gradle-ci/gradle-8.6/bin" >> $GITHUB_PATH
-
       - name: Setup Android SDK
         run: |
           echo "sdk.dir=$ANDROID_HOME" > local.properties
@@ -35,10 +28,10 @@ jobs:
             "platforms;android-34" "build-tools;34.0.0"
 
       - name: Build Debug APK
-        run: gradle assembleDebug --no-daemon --stacktrace
+        run: ./gradlew assembleDebug --no-daemon --stacktrace
 
       - name: Run unit tests
-        run: gradle testDebugUnitTest --no-daemon --info --stacktrace
+        run: ./gradlew testDebugUnitTest --no-daemon --info --stacktrace
         continue-on-error: true
 
       - name: Upload APK
