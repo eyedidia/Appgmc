@@ -1,0 +1,4 @@
+-keepattributes *Annotation*
+-keep class com.gmc.digitalkey.db.** { *; }
+-keep class com.gmc.digitalkey.model.** { *; }
+-dontwarn javax.annotation.**

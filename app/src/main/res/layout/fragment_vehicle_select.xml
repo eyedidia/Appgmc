@@ -1,0 +1,119 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:background="@color/bg_primary"
+    android:padding="20dp">
+
+    <ImageView
+        android:layout_width="wrap_content"
+        android:layout_height="36dp"
+        android:src="@drawable/ic_gmc_logo"
+        android:contentDescription="GMC"
+        android:layout_marginBottom="8dp" />
+
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="@string/select_model"
+        android:textColor="@color/text_primary"
+        android:textSize="20sp"
+        android:fontFamily="sans-serif-medium"
+        android:layout_marginBottom="24dp" />
+
+    <!-- Device found from BLE scan -->
+    <com.google.android.material.card.MaterialCardView
+        android:id="@+id/scanned_device_card"
+        style="@style/Widget.GMC.Card"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginBottom="16dp"
+        android:visibility="gone">
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:padding="12dp"
+            android:gravity="center_vertical">
+            <ImageView
+                android:layout_width="24dp"
+                android:layout_height="24dp"
+                android:src="@drawable/ic_ble"
+                android:layout_marginEnd="12dp"
+                android:contentDescription="BLE" />
+            <LinearLayout
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:orientation="vertical">
+                <TextView
+                    android:id="@+id/scanned_device_name"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="GMC Vehicle"
+                    android:textColor="@color/text_primary"
+                    android:textSize="15sp" />
+                <TextView
+                    android:id="@+id/scanned_device_address"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:textColor="@color/text_secondary"
+                    android:textSize="12sp" />
+            </LinearLayout>
+        </LinearLayout>
+    </com.google.android.material.card.MaterialCardView>
+
+    <!-- Model selection -->
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="VEHICLE MODEL"
+        android:textColor="@color/text_hint"
+        android:textSize="11sp"
+        android:letterSpacing="0.15"
+        android:layout_marginBottom="8dp" />
+
+    <RadioGroup
+        android:id="@+id/model_group"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginBottom="16dp">
+
+        <RadioButton android:id="@+id/model_hummer_pickup"
+            android:layout_width="match_parent" android:layout_height="52dp"
+            android:text="@string/model_hummer_ev_pickup"
+            android:textColor="@color/text_primary" android:textSize="15sp"
+            android:checked="true" android:buttonTint="@color/gmc_red"
+            android:paddingStart="8dp" />
+
+        <RadioButton android:id="@+id/model_hummer_suv"
+            android:layout_width="match_parent" android:layout_height="52dp"
+            android:text="@string/model_hummer_ev_suv"
+            android:textColor="@color/text_primary" android:textSize="15sp"
+            android:buttonTint="@color/gmc_red" android:paddingStart="8dp" />
+
+        <RadioButton android:id="@+id/model_sierra_ev"
+            android:layout_width="match_parent" android:layout_height="52dp"
+            android:text="@string/model_sierra_ev"
+            android:textColor="@color/text_primary" android:textSize="15sp"
+            android:buttonTint="@color/gmc_red" android:paddingStart="8dp" />
+
+        <RadioButton android:id="@+id/model_terrain_ev"
+            android:layout_width="match_parent" android:layout_height="52dp"
+            android:text="@string/model_terrain_ev"
+            android:textColor="@color/text_primary" android:textSize="15sp"
+            android:buttonTint="@color/gmc_red" android:paddingStart="8dp" />
+
+    </RadioGroup>
+
+    <com.google.android.material.button.MaterialButton
+        android:id="@+id/btn_confirm_pair"
+        style="@style/Widget.GMC.Button"
+        android:layout_width="match_parent"
+        android:layout_height="52dp"
+        android:text="Pair This Vehicle" />
+
+</LinearLayout>

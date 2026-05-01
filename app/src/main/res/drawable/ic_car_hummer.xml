@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Hummer EV silhouette (pickup style) -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="320dp"
+    android:height="120dp"
+    android:viewportWidth="320"
+    android:viewportHeight="120">
+    <!-- Body -->
+    <path
+        android:fillColor="#2A2A2A"
+        android:pathData="M20,80 L20,60 L40,40 L100,35 L140,30 L200,30 L240,40 L280,50 L300,60 L300,80 Z"/>
+    <!-- Cab roof -->
+    <path
+        android:fillColor="#333333"
+        android:pathData="M80,40 L85,25 L200,25 L220,40 Z"/>
+    <!-- Wheels -->
+    <circle android:fillColor="#1A1A1A" android:cx="70" android:cy="82" android:r="18"/>
+    <circle android:fillColor="#444444" android:cx="70" android:cy="82" android:r="10"/>
+    <circle android:fillColor="#1A1A1A" android:cx="245" android:cy="82" android:r="18"/>
+    <circle android:fillColor="#444444" android:cx="245" android:cy="82" android:r="10"/>
+    <!-- Headlight -->
+    <rect android:fillColor="@color/gmc_red" android:x="282" android:y="55" android:width="14" android:height="6" android:rx="2"/>
+    <!-- Taillight -->
+    <rect android:fillColor="@color/gmc_red" android:x="24" android:y="60" android:width="10" android:height="8" android:rx="2"/>
+    <!-- Charge port indicator -->
+    <circle android:fillColor="@color/status_charging" android:cx="160" android:cy="50" android:r="4"/>
+</vector>

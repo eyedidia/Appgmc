@@ -1,0 +1,166 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.core.widget.NestedScrollView
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@color/bg_primary">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:padding="20dp">
+
+        <!-- GMC Logo -->
+        <ImageView
+            android:layout_width="wrap_content"
+            android:layout_height="36dp"
+            android:src="@drawable/ic_gmc_logo"
+            android:contentDescription="GMC"
+            android:layout_marginBottom="24dp" />
+
+        <!-- Digital Key Status Card -->
+        <com.google.android.material.card.MaterialCardView
+            android:id="@+id/key_status_card"
+            style="@style/Widget.GMC.Card"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="16dp">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:padding="20dp"
+                android:gravity="center">
+
+                <!-- BLE ring animation area -->
+                <FrameLayout
+                    android:id="@+id/ble_ring_container"
+                    android:layout_width="120dp"
+                    android:layout_height="120dp"
+                    android:layout_marginBottom="16dp">
+
+                    <ImageView
+                        android:id="@+id/ble_ring_outer"
+                        android:layout_width="match_parent"
+                        android:layout_height="match_parent"
+                        android:src="@drawable/ic_ble"
+                        android:alpha="0.2"
+                        android:contentDescription="" />
+
+                    <ImageView
+                        android:id="@+id/ble_ring_inner"
+                        android:layout_width="80dp"
+                        android:layout_height="80dp"
+                        android:layout_gravity="center"
+                        android:src="@drawable/ic_ble"
+                        android:alpha="0.5"
+                        android:contentDescription="" />
+
+                    <ImageView
+                        android:id="@+id/ble_icon_center"
+                        android:layout_width="40dp"
+                        android:layout_height="40dp"
+                        android:layout_gravity="center"
+                        android:src="@drawable/ic_ble"
+                        android:contentDescription="BLE" />
+                </FrameLayout>
+
+                <TextView
+                    android:id="@+id/key_status_label"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="@string/digital_key_inactive"
+                    android:textColor="@color/text_primary"
+                    android:textSize="18sp"
+                    android:fontFamily="sans-serif-medium"
+                    tools:text="Digital Key Active" />
+
+                <TextView
+                    android:id="@+id/key_status_sub"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="@string/ble_disconnected"
+                    android:textColor="@color/text_secondary"
+                    android:textSize="14sp"
+                    android:layout_marginTop="4dp"
+                    tools:text="Connected • Signal Strong" />
+
+            </LinearLayout>
+        </com.google.android.material.card.MaterialCardView>
+
+        <!-- NFC Tap Card -->
+        <com.google.android.material.card.MaterialCardView
+            android:id="@+id/nfc_card"
+            style="@style/Widget.GMC.Card"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="16dp">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:padding="16dp"
+                android:gravity="center_vertical">
+
+                <ImageView
+                    android:layout_width="36dp"
+                    android:layout_height="36dp"
+                    android:src="@drawable/ic_nfc"
+                    android:contentDescription="NFC"
+                    android:layout_marginEnd="16dp" />
+
+                <TextView
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="@string/nfc_tap_prompt"
+                    android:textColor="@color/text_primary"
+                    android:textSize="14sp" />
+            </LinearLayout>
+        </com.google.android.material.card.MaterialCardView>
+
+        <!-- Paired Vehicles -->
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Paired Vehicles"
+            android:textColor="@color/text_secondary"
+            android:textSize="12sp"
+            android:letterSpacing="0.1"
+            android:layout_marginBottom="8dp" />
+
+        <LinearLayout
+            android:id="@+id/paired_vehicles_container"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:layout_marginBottom="16dp" />
+
+        <!-- No vehicles state -->
+        <TextView
+            android:id="@+id/no_vehicles_text"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="No vehicles paired yet"
+            android:textColor="@color/text_hint"
+            android:textSize="14sp"
+            android:gravity="center"
+            android:padding="20dp"
+            android:visibility="visible" />
+
+        <!-- Pair new vehicle button -->
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btn_pair_vehicle"
+            style="@style/Widget.GMC.Button.Outlined"
+            android:layout_width="match_parent"
+            android:layout_height="52dp"
+            android:text="@string/pair_vehicle"
+            android:layout_marginTop="8dp" />
+
+    </LinearLayout>
+</androidx.core.widget.NestedScrollView>

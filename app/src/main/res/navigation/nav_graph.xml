@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="utf-8"?>
+<navigation xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:id="@+id/nav_graph"
+    app:startDestination="@id/homeFragment">
+
+    <fragment
+        android:id="@+id/homeFragment"
+        android:name="com.gmc.digitalkey.ui.home.HomeFragment"
+        android:label="@string/nav_home" />
+
+    <fragment
+        android:id="@+id/digitalKeyFragment"
+        android:name="com.gmc.digitalkey.ui.key.DigitalKeyFragment"
+        android:label="@string/nav_key">
+        <action
+            android:id="@+id/action_key_to_vehicle_select"
+            app:destination="@id/vehicleSelectFragment" />
+    </fragment>
+
+    <fragment
+        android:id="@+id/chargeFragment"
+        android:name="com.gmc.digitalkey.ui.charge.ChargeFragment"
+        android:label="@string/nav_charge" />
+
+    <fragment
+        android:id="@+id/settingsFragment"
+        android:name="com.gmc.digitalkey.ui.settings.SettingsFragment"
+        android:label="@string/nav_settings" />
+
+    <fragment
+        android:id="@+id/vehicleSelectFragment"
+        android:name="com.gmc.digitalkey.ui.settings.VehicleSelectFragment"
+        android:label="@string/select_model" />
+
+</navigation>

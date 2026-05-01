@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- GMC Brand Colors -->
+    <color name="gmc_red">#CC0000</color>
+    <color name="gmc_red_dark">#990000</color>
+    <color name="gmc_red_light">#FF3333</color>
+
+    <!-- Backgrounds -->
+    <color name="bg_primary">#000000</color>
+    <color name="bg_surface">#111111</color>
+    <color name="bg_card">#1A1A1A</color>
+    <color name="bg_elevated">#242424</color>
+
+    <!-- Text -->
+    <color name="text_primary">#FFFFFF</color>
+    <color name="text_secondary">#888888</color>
+    <color name="text_hint">#555555</color>
+
+    <!-- Status Colors -->
+    <color name="status_connected">#00CC66</color>
+    <color name="status_warning">#FFAA00</color>
+    <color name="status_error">#FF3333</color>
+    <color name="status_charging">#00AAFF</color>
+
+    <!-- UI Elements -->
+    <color name="divider">#2A2A2A</color>
+    <color name="button_disabled">#333333</color>
+    <color name="overlay_dark">#99000000</color>
+
+    <!-- Charge arc -->
+    <color name="charge_arc_bg">#2A2A2A</color>
+    <color name="charge_arc_low">#FF3333</color>
+    <color name="charge_arc_mid">#FFAA00</color>
+    <color name="charge_arc_high">#00CC66</color>
+</resources>

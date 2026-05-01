@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- GMC wordmark-style logo in white -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="120dp"
+    android:height="48dp"
+    android:viewportWidth="120"
+    android:viewportHeight="48">
+    <!-- G -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M12,8 C5.4,8 0,13.4 0,20 C0,26.6 5.4,32 12,32 L20,32 L20,20 L14,20 L14,24 L16,24 L16,28 L12,28 C7.6,28 4,24.4 4,20 C4,15.6 7.6,12 12,12 L22,12 L22,8 Z" />
+    <!-- M -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M26,8 L30,8 L36,18 L42,8 L46,8 L46,32 L42,32 L42,16 L36,26 L30,16 L30,32 L26,32 Z" />
+    <!-- C -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M62,8 C55.4,8 50,13.4 50,20 C50,26.6 55.4,32 62,32 L74,32 L74,28 L62,28 C57.6,28 54,24.4 54,20 C54,15.6 57.6,12 62,12 L74,12 L74,8 Z" />
+</vector>

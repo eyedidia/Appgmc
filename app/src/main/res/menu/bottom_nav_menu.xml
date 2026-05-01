@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<menu xmlns:android="http://schemas.android.com/apk/res/android">
+    <item
+        android:id="@+id/homeFragment"
+        android:icon="@drawable/ic_car_hummer"
+        android:title="@string/nav_home" />
+    <item
+        android:id="@+id/digitalKeyFragment"
+        android:icon="@drawable/ic_lock"
+        android:title="@string/nav_key" />
+    <item
+        android:id="@+id/chargeFragment"
+        android:icon="@drawable/ic_charge"
+        android:title="@string/nav_charge" />
+    <item
+        android:id="@+id/settingsFragment"
+        android:icon="@drawable/ic_ble"
+        android:title="@string/nav_settings" />
+</menu>

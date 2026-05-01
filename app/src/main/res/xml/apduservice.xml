@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<host-apdu-service xmlns:android="http://schemas.android.com/apk/res/android"
+    android:description="@string/hce_service_description"
+    android:requireDeviceUnlock="false">
+    <aid-group android:description="@string/hce_aid_description"
+        android:category="other">
+        <!-- GMC Digital Key AID -->
+        <aid-filter android:name="F04756494E47454E4B4579" />
+    </aid-group>
+</host-apdu-service>

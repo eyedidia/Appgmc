@@ -1,0 +1,313 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.constraintlayout.widget.ConstraintLayout
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@color/bg_primary">
+
+    <!-- GMC Logo top-left -->
+    <ImageView
+        android:id="@+id/gmc_logo"
+        android:layout_width="wrap_content"
+        android:layout_height="40dp"
+        android:src="@drawable/ic_gmc_logo"
+        android:contentDescription="GMC"
+        app:layout_constraintTop_toTopOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        android:layout_marginTop="16dp"
+        android:layout_marginStart="20dp" />
+
+    <!-- BLE status chip top-right -->
+    <LinearLayout
+        android:id="@+id/ble_status_container"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:gravity="center_vertical"
+        android:background="@color/bg_card"
+        android:padding="8dp"
+        app:layout_constraintTop_toTopOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        android:layout_marginTop="16dp"
+        android:layout_marginEnd="20dp">
+
+        <ImageView
+            android:id="@+id/ble_icon"
+            android:layout_width="16dp"
+            android:layout_height="16dp"
+            android:src="@drawable/ic_ble"
+            android:contentDescription="BLE" />
+
+        <TextView
+            android:id="@+id/ble_status_text"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="@string/ble_disconnected"
+            android:textColor="@color/text_secondary"
+            android:textSize="12sp"
+            android:layout_marginStart="4dp"
+            tools:text="Connected" />
+    </LinearLayout>
+
+    <!-- Vehicle name -->
+    <TextView
+        android:id="@+id/vehicle_name"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="Hummer EV Pickup"
+        android:textColor="@color/text_primary"
+        android:textSize="22sp"
+        android:fontFamily="sans-serif-medium"
+        app:layout_constraintTop_toBottomOf="@id/gmc_logo"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        android:layout_marginTop="32dp"
+        tools:text="Hummer EV Pickup" />
+
+    <!-- Vehicle silhouette -->
+    <ImageView
+        android:id="@+id/vehicle_image"
+        android:layout_width="0dp"
+        android:layout_height="120dp"
+        android:src="@drawable/ic_car_hummer"
+        android:contentDescription="Vehicle"
+        android:scaleType="fitCenter"
+        app:layout_constraintTop_toBottomOf="@id/vehicle_name"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        android:layout_marginTop="16dp"
+        android:layout_marginStart="16dp"
+        android:layout_marginEnd="16dp" />
+
+    <!-- Lock state + SOC badge -->
+    <LinearLayout
+        android:id="@+id/status_row"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:gravity="center_vertical"
+        app:layout_constraintTop_toBottomOf="@id/vehicle_image"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        android:layout_marginTop="12dp">
+
+        <TextView
+            android:id="@+id/lock_state_text"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="@string/vehicle_status_unknown"
+            android:textColor="@color/text_secondary"
+            android:textSize="16sp"
+            tools:text="Locked" />
+
+        <View
+            android:layout_width="1dp"
+            android:layout_height="16dp"
+            android:background="@color/divider"
+            android:layout_marginStart="12dp"
+            android:layout_marginEnd="12dp" />
+
+        <TextView
+            android:id="@+id/soc_text"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:textColor="@color/status_connected"
+            android:textSize="16sp"
+            android:visibility="gone"
+            tools:text="87%" />
+
+        <TextView
+            android:id="@+id/engine_state_text"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="@string/engine_off"
+            android:textColor="@color/text_secondary"
+            android:textSize="16sp" />
+    </LinearLayout>
+
+    <!-- 4 Action Buttons -->
+    <LinearLayout
+        android:id="@+id/action_buttons"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:gravity="center"
+        android:layout_marginStart="16dp"
+        android:layout_marginEnd="16dp"
+        android:layout_marginTop="32dp"
+        app:layout_constraintTop_toBottomOf="@id/status_row"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent">
+
+        <!-- Lock -->
+        <LinearLayout
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:orientation="vertical"
+            android:gravity="center">
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btn_lock"
+                style="@style/Widget.GMC.Button.Circular"
+                android:layout_width="72dp"
+                android:layout_height="72dp"
+                android:insetTop="0dp"
+                android:insetBottom="0dp"
+                app:icon="@drawable/ic_lock"
+                app:iconGravity="textStart"
+                app:iconSize="28dp"
+                app:iconPadding="0dp"
+                android:text="" />
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="@string/action_lock"
+                android:textColor="@color/text_secondary"
+                android:textSize="12sp"
+                android:layout_marginTop="6dp" />
+        </LinearLayout>
+
+        <!-- Unlock -->
+        <LinearLayout
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:orientation="vertical"
+            android:gravity="center">
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btn_unlock"
+                style="@style/Widget.GMC.Button.Circular"
+                android:layout_width="72dp"
+                android:layout_height="72dp"
+                android:insetTop="0dp"
+                android:insetBottom="0dp"
+                app:icon="@drawable/ic_unlock"
+                app:iconGravity="textStart"
+                app:iconSize="28dp"
+                app:iconPadding="0dp"
+                android:text="" />
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="@string/action_unlock"
+                android:textColor="@color/text_secondary"
+                android:textSize="12sp"
+                android:layout_marginTop="6dp" />
+        </LinearLayout>
+
+        <!-- Remote Start -->
+        <LinearLayout
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:orientation="vertical"
+            android:gravity="center">
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btn_remote_start"
+                style="@style/Widget.GMC.Button.Circular"
+                android:layout_width="72dp"
+                android:layout_height="72dp"
+                android:insetTop="0dp"
+                android:insetBottom="0dp"
+                app:icon="@drawable/ic_start"
+                app:iconGravity="textStart"
+                app:iconSize="28dp"
+                app:iconPadding="0dp"
+                android:text="" />
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="@string/action_remote_start"
+                android:textColor="@color/text_secondary"
+                android:textSize="12sp"
+                android:layout_marginTop="6dp" />
+        </LinearLayout>
+
+        <!-- Horn & Lights -->
+        <LinearLayout
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:orientation="vertical"
+            android:gravity="center">
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btn_horn"
+                style="@style/Widget.GMC.Button.Circular"
+                android:layout_width="72dp"
+                android:layout_height="72dp"
+                android:insetTop="0dp"
+                android:insetBottom="0dp"
+                app:icon="@drawable/ic_horn_lights"
+                app:iconGravity="textStart"
+                app:iconSize="28dp"
+                app:iconPadding="0dp"
+                android:text="" />
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Horn"
+                android:textColor="@color/text_secondary"
+                android:textSize="12sp"
+                android:layout_marginTop="6dp" />
+        </LinearLayout>
+
+    </LinearLayout>
+
+    <!-- BLE error banner -->
+    <com.google.android.material.card.MaterialCardView
+        android:id="@+id/error_banner"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_marginStart="16dp"
+        android:layout_marginEnd="16dp"
+        android:layout_marginTop="20dp"
+        android:visibility="gone"
+        app:cardBackgroundColor="@color/bg_card"
+        app:strokeColor="@color/status_error"
+        app:strokeWidth="1dp"
+        app:cardCornerRadius="8dp"
+        app:layout_constraintTop_toBottomOf="@id/action_buttons"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent">
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:padding="12dp"
+            android:gravity="center_vertical">
+            <TextView
+                android:id="@+id/error_text"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:textColor="@color/status_error"
+                android:textSize="14sp"
+                tools:text="Vehicle out of range" />
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/error_action_btn"
+                style="@style/Widget.MaterialComponents.Button.TextButton"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="@string/ble_off_action"
+                android:textColor="@color/gmc_red" />
+        </LinearLayout>
+    </com.google.android.material.card.MaterialCardView>
+
+    <!-- No vehicle paired message -->
+    <TextView
+        android:id="@+id/no_vehicle_text"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="@string/no_vehicle_paired"
+        android:textColor="@color/text_secondary"
+        android:textSize="16sp"
+        android:gravity="center"
+        android:visibility="gone"
+        app:layout_constraintTop_toTopOf="parent"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent" />
+
+</androidx.constraintlayout.widget.ConstraintLayout>
