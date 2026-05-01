@@ -21,6 +21,10 @@
     <!-- Vibration for feedback on lock/unlock -->
     <uses-permission android:name="android.permission.VIBRATE" />
 
+    <!-- Keep service alive past battery optimisation -->
+    <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+
     <!-- Hardware features -->
     <uses-feature android:name="android.hardware.bluetooth_le" android:required="true" />
     <uses-feature android:name="android.hardware.nfc" android:required="false" />
@@ -73,6 +77,16 @@
             android:name=".ble.PassiveUnlockService"
             android:exported="false"
             android:foregroundServiceType="connectedDevice" />
+
+        <!-- Restart service after reboot or app update -->
+        <receiver
+            android:name=".ble.BootReceiver"
+            android:exported="true">
+            <intent-filter android:priority="100">
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
+            </intent-filter>
+        </receiver>
 
     </application>
 

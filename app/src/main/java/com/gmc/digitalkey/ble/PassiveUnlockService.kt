@@ -45,6 +45,7 @@ class PassiveUnlockService : Service() {
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        // START_STICKY causes Android to restart the service if killed by OS/battery optimiser
         scope.launch { runProximityLoop() }
         return START_STICKY
     }

@@ -83,6 +83,10 @@
     <string name="hce_service_description">GMC Digital Key</string>
     <string name="hce_aid_description">GMC Vehicle Access</string>
 
+    <!-- Battery optimization -->
+    <string name="battery_opt_title">Allow Background Operation</string>
+    <string name="battery_opt_msg">To unlock your vehicle when you approach, myGMC needs to run in the background without battery restrictions.</string>
+
     <!-- Dialogs -->
     <string name="ok">OK</string>
     <string name="cancel">Cancel</string>

@@ -1,7 +1,12 @@
 package com.gmc.digitalkey.ui.settings
 
 import android.annotation.SuppressLint
+import android.content.Intent
+import android.net.Uri
+import android.os.Build
 import android.os.Bundle
+import android.os.PowerManager
+import android.provider.Settings
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
@@ -61,12 +66,25 @@ class SettingsFragment : Fragment() {
             viewLifecycleOwner.lifecycleScope.launch {
                 val vehicle = db.vehicleDao().getAll().firstOrNull() ?: return@launch
                 db.vehicleDao().setPassiveUnlock(vehicle.id, enabled)
-                // Also save active vehicle for HCE
                 prefs.edit().putString("active_vehicle_id", vehicle.id).apply()
-                if (enabled) PassiveUnlockService.start(requireContext())
-                else PassiveUnlockService.stop(requireContext())
+                if (enabled) {
+                    requestBatteryOptimizationExemption()
+                    PassiveUnlockService.start(requireContext())
+                } else {
+                    PassiveUnlockService.stop(requireContext())
+                }
             }
         }
+    }
+
+    private fun requestBatteryOptimizationExemption() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M) return
+        val pm = requireContext().getSystemService(PowerManager::class.java)
+        val pkg = requireContext().packageName
+        if (pm.isIgnoringBatteryOptimizations(pkg)) return
+        startActivity(Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS).apply {
+            data = Uri.parse("package:$pkg")
+        })
     }
 
     override fun onDestroyView() {
