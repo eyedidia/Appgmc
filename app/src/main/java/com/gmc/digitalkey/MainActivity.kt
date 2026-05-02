@@ -1,9 +1,14 @@
 package com.gmc.digitalkey
 
+import android.Manifest
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.nfc.NfcAdapter
+import android.os.Build
 import android.os.Bundle
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.app.ActivityCompat
+import androidx.core.content.ContextCompat
 import androidx.navigation.fragment.NavHostFragment
 import androidx.navigation.ui.setupWithNavController
 import com.gmc.digitalkey.databinding.ActivityMainBinding
@@ -25,6 +30,25 @@ class MainActivity : AppCompatActivity() {
         binding.bottomNav.setupWithNavController(navController)
 
         nfcKeyHandler = NfcKeyHandler(this, BleManager(this))
+
+        requestRuntimePermissions()
+    }
+
+    private fun requestRuntimePermissions() {
+        val needed = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            arrayOf(
+                Manifest.permission.BLUETOOTH_SCAN,
+                Manifest.permission.BLUETOOTH_CONNECT
+            )
+        } else {
+            arrayOf(Manifest.permission.ACCESS_FINE_LOCATION)
+        }
+        val missing = needed.filter {
+            ContextCompat.checkSelfPermission(this, it) != PackageManager.PERMISSION_GRANTED
+        }
+        if (missing.isNotEmpty()) {
+            ActivityCompat.requestPermissions(this, missing.toTypedArray(), REQUEST_BLE_PERMS)
+        }
     }
 
     override fun onResume() {
@@ -43,5 +67,9 @@ class MainActivity : AppCompatActivity() {
             intent.action == NfcAdapter.ACTION_TAG_DISCOVERED) {
             nfcKeyHandler.handleIntent(intent)
         }
+    }
+
+    companion object {
+        private const val REQUEST_BLE_PERMS = 100
     }
 }

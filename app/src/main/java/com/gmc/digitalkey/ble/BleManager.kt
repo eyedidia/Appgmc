@@ -36,10 +36,20 @@ class BleManager(private val context: Context) {
 
     val isBluetoothOn get() = adapter?.isEnabled == true
 
+    private fun hasScanPermission(): Boolean {
+        val perm = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S)
+            android.Manifest.permission.BLUETOOTH_SCAN
+        else
+            android.Manifest.permission.ACCESS_FINE_LOCATION
+        return androidx.core.content.ContextCompat.checkSelfPermission(context, perm) ==
+                android.content.pm.PackageManager.PERMISSION_GRANTED
+    }
+
     // ─── Scanning ─────────────────────────────────────────────────────────────
 
     fun scanForVehicle(targetAddress: String? = null, onFound: (BluetoothDevice) -> Unit) {
         if (!isBluetoothOn) { _connectionState.value = BleConnectionState.BluetoothOff; return }
+        if (!hasScanPermission()) { _connectionState.value = BleConnectionState.PermissionDenied; return }
         _connectionState.value = BleConnectionState.Scanning
         scanner = adapter.bluetoothLeScanner
 
