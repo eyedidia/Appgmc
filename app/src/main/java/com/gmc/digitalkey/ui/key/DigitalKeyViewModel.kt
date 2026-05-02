@@ -44,16 +44,19 @@ class DigitalKeyViewModel(app: Application) : AndroidViewModel(app) {
         _isScanning.value = true
         bleManager.scanAll(
             onFound = { device, rssi ->
+                // Ignore very weak signals — user is next to their vehicle
+                if (rssi < -80) return@scanAll
                 val name = runCatching { device.name }.getOrNull()
                     ?.takeIf { it.isNotBlank() } ?: device.address
                 val current = _scanResults.value.toMutableList()
                 val idx = current.indexOfFirst { it.device.address == device.address }
                 if (idx >= 0) {
+                    // Update RSSI in place — keep insertion order (no reordering)
                     current[idx] = ScannedDevice(device, rssi, name)
                 } else {
                     current.add(ScannedDevice(device, rssi, name))
                 }
-                _scanResults.value = current.sortedByDescending { it.rssi }
+                _scanResults.value = current
             },
             onStopped = { _isScanning.value = false }
         )
