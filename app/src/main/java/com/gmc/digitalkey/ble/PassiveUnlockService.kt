@@ -60,7 +60,7 @@ class PassiveUnlockService : Service() {
 
     private suspend fun runProximityLoop() {
         val db = AppDatabase.get(applicationContext)
-        while (coroutineContext.isActive) {
+        while (currentCoroutineContext().isActive) {
             val vehicles = db.vehicleDao().getAll().filter { it.passiveUnlockEnabled }
             if (vehicles.isEmpty()) { delay(10_000); continue }
 
