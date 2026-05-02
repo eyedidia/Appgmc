@@ -7,6 +7,7 @@ data class PairedVehicle(
     val year: Int,
     val bleAddress: String,
     val vin: String,
+    val imageUrl: String = "",
     val passiveUnlockEnabled: Boolean = false
 )
 

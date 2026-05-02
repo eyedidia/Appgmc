@@ -30,6 +30,12 @@ interface VehicleDao {
     @Query("UPDATE vehicles SET passiveUnlockEnabled = :enabled WHERE id = :id")
     suspend fun setPassiveUnlock(id: String, enabled: Boolean)
 
+    @Query("UPDATE vehicles SET displayName = :name WHERE id = :id")
+    suspend fun updateDisplayName(id: String, name: String)
+
+    @Query("UPDATE vehicles SET imageUrl = :url WHERE id = :id")
+    suspend fun updateImageUrl(id: String, url: String)
+
     @Delete
     suspend fun delete(vehicle: VehicleEntity)
 

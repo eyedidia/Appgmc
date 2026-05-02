@@ -1,6 +1,7 @@
 package com.gmc.digitalkey.ui.home
 
 import android.content.Intent
+import coil.load
 import android.os.Bundle
 import android.provider.Settings
 import android.view.LayoutInflater
@@ -92,6 +93,15 @@ class HomeFragment : Fragment() {
                     binding.vehicleSelector.visibility = View.VISIBLE
                     binding.actionButtons.visibility = View.VISIBLE
                     binding.vehicleName.text = vehicle.displayName
+                    if (vehicle.imageUrl.isNotEmpty()) {
+                        binding.vehicleImage.load(vehicle.imageUrl) {
+                            crossfade(true)
+                            placeholder(R.drawable.ic_car_hummer)
+                            error(R.drawable.ic_car_hummer)
+                        }
+                    } else {
+                        binding.vehicleImage.setImageResource(R.drawable.ic_car_hummer)
+                    }
                     if (!viewModel.connectionState.value.isConnected) {
                         viewModel.connectToVehicle(vehicle)
                     }

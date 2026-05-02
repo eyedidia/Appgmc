@@ -21,8 +21,13 @@ import com.gmc.digitalkey.databinding.FragmentVehicleSelectBinding
 import com.gmc.digitalkey.model.GmcEvModel
 import com.gmc.digitalkey.ui.key.DigitalKeyViewModel
 import com.gmc.digitalkey.ui.key.ScannedDevice
+import coil.load
+import coil.transform.RoundedCornersTransformation
+import com.gmc.digitalkey.vin.VinDecoder
+import com.gmc.digitalkey.vin.VinInfo
 import com.journeyapps.barcodescanner.ScanContract
 import com.journeyapps.barcodescanner.ScanOptions
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 
 class VehicleSelectFragment : Fragment() {
@@ -33,6 +38,8 @@ class VehicleSelectFragment : Fragment() {
 
     private var selectedDevice: BluetoothDevice? = null
     private var enteredVin = ""
+    private var decodedVinInfo: VinInfo? = null
+    private var decodeJob: Job? = null
     private var nameFilter = ""
     private var gmcOnlyFilter = false
     private var nearOnlyFilter = false   // rssi > -70
@@ -98,7 +105,8 @@ class VehicleSelectFragment : Fragment() {
                 binding.modelTerrainEv.id    -> GmcEvModel.TERRAIN_EV
                 else                         -> GmcEvModel.HUMMER_EV_PICKUP
             }
-            viewModel.pairDevice(device, model, model.displayName, enteredVin)
+            viewModel.pairDevice(device, model, model.displayName, enteredVin,
+                decodedVinInfo?.imageUrl ?: "")
             findNavController().popBackStack()
         }
 
@@ -141,7 +149,7 @@ class VehicleSelectFragment : Fragment() {
         }
         binding.vinStatus.text = when {
             raw.isEmpty() -> "Scan the QR code on your door jamb, or enter VIN manually to identify your vehicle"
-            isValid -> "VIN confirmed — BLE scan will highlight your vehicle"
+            isValid -> "VIN confirmed — fetching vehicle info…"
             else -> "VIN must be 17 characters (A–Z excluding I/O/Q, digits)"
         }
         binding.vinStatus.setTextColor(
@@ -151,7 +159,61 @@ class VehicleSelectFragment : Fragment() {
                 else -> R.color.status_error
             })
         )
+        if (isValid) decodeVinAsync(raw) else showDecodedCard(null)
         renderDeviceList(viewModel.scanResults.value)
+    }
+
+    private fun decodeVinAsync(vin: String) {
+        decodeJob?.cancel()
+        binding.decodeProgress.visibility = View.VISIBLE
+        binding.decodedCard.visibility = View.VISIBLE
+        binding.decodedTitle.text = "Looking up VIN…"
+        binding.decodedDetail.text = ""
+        binding.decodedBadge.visibility = View.GONE
+        decodeJob = viewLifecycleOwner.lifecycleScope.launch {
+            val info = VinDecoder.decode(vin)
+            if (_binding == null) return@launch
+            binding.decodeProgress.visibility = View.GONE
+            showDecodedCard(info)
+        }
+    }
+
+    private fun showDecodedCard(info: VinInfo?) {
+        decodedVinInfo = info
+        if (info == null) {
+            binding.decodedCard.visibility = View.GONE
+            return
+        }
+        binding.decodedCard.visibility = View.VISIBLE
+        binding.decodeProgress.visibility = View.GONE
+        binding.decodedTitle.text = "${info.year} ${info.make.lowercase().replaceFirstChar { it.uppercase() }} ${info.model.lowercase().replaceFirstChar { it.uppercase() }}"
+        binding.decodedDetail.text = buildString {
+            if (info.bodyClass.isNotEmpty()) append(info.bodyClass)
+            if (info.isElectric) append(" · Electric")
+        }
+        binding.decodedBadge.visibility = View.VISIBLE
+
+        // Load Wikipedia image or fall back to local drawable
+        if (info.imageUrl.isNotEmpty()) {
+            binding.decodedVehicleImage.load(info.imageUrl) {
+                crossfade(true)
+                transformations(RoundedCornersTransformation(8f))
+                placeholder(R.drawable.ic_car_hummer)
+                error(R.drawable.ic_car_hummer)
+            }
+        }
+
+        // Auto-select the matching model radio button
+        val modelRadioId = when {
+            info.model.contains("HUMMER") && info.bodyClass.contains("pickup", ignoreCase = true) -> binding.modelHummerPickup.id
+            info.model.contains("HUMMER") -> binding.modelHummerSuv.id
+            info.model.contains("SIERRA") -> binding.modelSierraEv.id
+            info.model.contains("TERRAIN") -> binding.modelTerrainEv.id
+            else -> null
+        }
+        if (modelRadioId != null) binding.modelGroup.check(modelRadioId)
+
+        binding.vinStatus.text = "✓ ${info.year} ${info.make} ${info.model} — model auto-selected"
     }
 
     private fun applyFilters(devices: List<ScannedDevice>): List<ScannedDevice> = devices.filter { s ->

@@ -67,7 +67,13 @@ class DigitalKeyViewModel(app: Application) : AndroidViewModel(app) {
         _isScanning.value = false
     }
 
-    fun pairDevice(device: BluetoothDevice, model: GmcEvModel, displayName: String, vin: String = "") {
+    fun pairDevice(
+        device: BluetoothDevice,
+        model: GmcEvModel,
+        displayName: String,
+        vin: String = "",
+        imageUrl: String = ""
+    ) {
         viewModelScope.launch {
             val vehicleId = UUID.randomUUID().toString()
             val publicKey = KeyCredentialStore.generateKeyPair(vehicleId)
@@ -79,6 +85,7 @@ class DigitalKeyViewModel(app: Application) : AndroidViewModel(app) {
                 year = 2024,
                 bleAddress = device.address,
                 vin = vin,
+                imageUrl = imageUrl,
                 publicKeyBytes = publicKey.encoded
             )
             db.vehicleDao().insert(entity)

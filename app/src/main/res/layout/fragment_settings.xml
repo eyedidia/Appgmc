@@ -47,8 +47,23 @@
                     android:orientation="horizontal" android:gravity="center_vertical">
                     <TextView android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1"
                         android:text="@string/settings_vehicle_name" android:textColor="@color/text_secondary" android:textSize="14sp" />
-                    <TextView android:id="@+id/vehicle_name_value" android:layout_width="wrap_content"
-                        android:layout_height="wrap_content" android:text="—" android:textColor="@color/text_primary" android:textSize="14sp" />
+                    <TextView android:id="@+id/vehicle_name_value" android:layout_width="0dp"
+                        android:layout_height="wrap_content" android:layout_weight="1"
+                        android:text="—" android:textColor="@color/text_primary" android:textSize="14sp"
+                        android:gravity="end" android:ellipsize="end" android:maxLines="1" />
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/btn_edit_name"
+                        style="@style/Widget.MaterialComponents.Button.TextButton"
+                        android:layout_width="36dp"
+                        android:layout_height="36dp"
+                        android:padding="0dp"
+                        android:insetTop="0dp"
+                        android:insetBottom="0dp"
+                        app:icon="@drawable/ic_edit"
+                        app:iconSize="18dp"
+                        app:iconGravity="textStart"
+                        app:iconPadding="0dp"
+                        app:iconTint="@color/text_hint" />
                 </LinearLayout>
 
                 <View android:layout_width="match_parent" android:layout_height="1dp" android:background="@color/divider" />

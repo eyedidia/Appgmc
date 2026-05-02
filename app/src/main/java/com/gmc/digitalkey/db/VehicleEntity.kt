@@ -11,6 +11,7 @@ data class VehicleEntity(
     val year: Int,
     val bleAddress: String,
     val vin: String,                 // full 17-char VIN (empty if not provided at pairing)
+    val imageUrl: String = "",       // Wikipedia thumbnail URL (empty = use local drawable)
     val publicKeyBytes: ByteArray,
     val pairedAt: Long = System.currentTimeMillis(),
     val passiveUnlockEnabled: Boolean = false,

@@ -42,6 +42,7 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
                         year = it.year,
                         bleAddress = it.bleAddress,
                         vin = it.vin,
+                        imageUrl = it.imageUrl,
                         passiveUnlockEnabled = it.passiveUnlockEnabled
                     )
                 }

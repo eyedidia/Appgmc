@@ -10,12 +10,15 @@ import android.provider.Settings
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
+import android.widget.EditText
 import androidx.fragment.app.Fragment
 import androidx.lifecycle.lifecycleScope
 import androidx.preference.PreferenceManager
+import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.gmc.digitalkey.ble.PassiveUnlockService
 import com.gmc.digitalkey.databinding.FragmentSettingsBinding
 import com.gmc.digitalkey.db.AppDatabase
+import com.gmc.digitalkey.db.VehicleEntity
 import com.gmc.digitalkey.model.GmcEvModel
 import kotlinx.coroutines.launch
 
@@ -35,20 +38,45 @@ class SettingsFragment : Fragment() {
         val db = AppDatabase.get(requireContext())
         val prefs = PreferenceManager.getDefaultSharedPreferences(requireContext())
 
+        var currentVehicle: VehicleEntity? = null
+
         viewLifecycleOwner.lifecycleScope.launch {
             db.vehicleDao().observeAll().collect { vehicles ->
                 val vehicle = vehicles.firstOrNull()
+                currentVehicle = vehicle
                 if (vehicle != null) {
                     binding.vehicleNameValue.text = vehicle.displayName
                     binding.vehicleModelValue.text = GmcEvModel.fromKey(vehicle.modelKey).displayName
                     binding.vehicleVinValue.text = vehicle.vin.ifEmpty { "Not provided" }
                     binding.passiveUnlockSwitch.isChecked = vehicle.passiveUnlockEnabled
+                    binding.btnEditName.visibility = View.VISIBLE
                 } else {
                     binding.vehicleNameValue.text = "—"
                     binding.vehicleModelValue.text = "—"
                     binding.vehicleVinValue.text = "—"
+                    binding.btnEditName.visibility = View.GONE
                 }
             }
+        }
+
+        binding.btnEditName.setOnClickListener {
+            val vehicle = currentVehicle ?: return@setOnClickListener
+            val input = EditText(requireContext()).apply {
+                setText(vehicle.displayName)
+                selectAll()
+                setSingleLine()
+            }
+            MaterialAlertDialogBuilder(requireContext())
+                .setTitle("Rename Vehicle")
+                .setView(input)
+                .setPositiveButton("Save") { _, _ ->
+                    val newName = input.text.toString().trim().ifEmpty { return@setPositiveButton }
+                    viewLifecycleOwner.lifecycleScope.launch {
+                        db.vehicleDao().updateDisplayName(vehicle.id, newName)
+                    }
+                }
+                .setNegativeButton("Cancel", null)
+                .show()
         }
 
         // NFC mode

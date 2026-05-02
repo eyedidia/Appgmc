@@ -2,6 +2,7 @@
 <androidx.core.widget.NestedScrollView
     xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:background="@color/bg_primary"
@@ -103,6 +104,79 @@
                     android:textColor="@color/text_hint"
                     android:textSize="12sp"
                     android:layout_marginTop="6dp" />
+
+            </LinearLayout>
+        </com.google.android.material.card.MaterialCardView>
+
+        <!-- Decoded VIN info card (shown after successful decode) -->
+        <com.google.android.material.card.MaterialCardView
+            android:id="@+id/decoded_card"
+            style="@style/Widget.GMC.Card"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="16dp"
+            android:visibility="gone"
+            app:strokeColor="@color/status_connected"
+            app:strokeWidth="1dp">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:padding="12dp"
+                android:gravity="center_vertical">
+
+                <ImageView
+                    android:id="@+id/decoded_vehicle_image"
+                    android:layout_width="100dp"
+                    android:layout_height="68dp"
+                    android:scaleType="centerCrop"
+                    android:src="@drawable/ic_car_hummer"
+                    android:contentDescription="Vehicle"
+                    android:layout_marginEnd="12dp" />
+
+                <LinearLayout
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:orientation="vertical">
+
+                    <TextView
+                        android:id="@+id/decoded_title"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:textColor="@color/text_primary"
+                        android:textSize="15sp"
+                        android:fontFamily="sans-serif-medium"
+                        tools:text="2024 GMC Hummer EV" />
+
+                    <TextView
+                        android:id="@+id/decoded_detail"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:textColor="@color/text_secondary"
+                        android:textSize="12sp"
+                        android:layout_marginTop="2dp"
+                        tools:text="Pickup · Electric" />
+
+                    <TextView
+                        android:id="@+id/decoded_badge"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="✓ Verified via NHTSA"
+                        android:textColor="@color/status_connected"
+                        android:textSize="11sp"
+                        android:layout_marginTop="4dp" />
+
+                </LinearLayout>
+
+                <ProgressBar
+                    android:id="@+id/decode_progress"
+                    android:layout_width="24dp"
+                    android:layout_height="24dp"
+                    android:indeterminate="true"
+                    android:indeterminateTint="@color/gmc_red"
+                    android:visibility="gone" />
 
             </LinearLayout>
         </com.google.android.material.card.MaterialCardView>
