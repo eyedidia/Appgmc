@@ -67,17 +67,18 @@ class DigitalKeyViewModel(app: Application) : AndroidViewModel(app) {
         _isScanning.value = false
     }
 
-    fun pairDevice(device: BluetoothDevice, model: GmcEvModel, displayName: String) {
+    fun pairDevice(device: BluetoothDevice, model: GmcEvModel, displayName: String, vin: String = "") {
         viewModelScope.launch {
             val vehicleId = UUID.randomUUID().toString()
             val publicKey = KeyCredentialStore.generateKeyPair(vehicleId)
+            val label = if (vin.length == 17) "${model.displayName} (${vin.takeLast(6)})" else displayName
             val entity = VehicleEntity(
                 id = vehicleId,
-                displayName = displayName,
+                displayName = label,
                 modelKey = model.name,
                 year = 2024,
                 bleAddress = device.address,
-                vinPrefix = "1GKSX",
+                vin = vin,
                 publicKeyBytes = publicKey.encoded
             )
             db.vehicleDao().insert(entity)

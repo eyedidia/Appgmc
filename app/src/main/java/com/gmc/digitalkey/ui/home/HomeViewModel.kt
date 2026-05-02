@@ -37,7 +37,7 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
                         model = GmcEvModel.fromKey(it.modelKey),
                         year = it.year,
                         bleAddress = it.bleAddress,
-                        vinPrefix = it.vinPrefix,
+                        vin = it.vin,
                         passiveUnlockEnabled = it.passiveUnlockEnabled
                     )
                 }

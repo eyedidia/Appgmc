@@ -21,6 +21,8 @@ import com.gmc.digitalkey.databinding.FragmentVehicleSelectBinding
 import com.gmc.digitalkey.model.GmcEvModel
 import com.gmc.digitalkey.ui.key.DigitalKeyViewModel
 import com.gmc.digitalkey.ui.key.ScannedDevice
+import com.journeyapps.barcodescanner.ScanContract
+import com.journeyapps.barcodescanner.ScanOptions
 import kotlinx.coroutines.launch
 
 class VehicleSelectFragment : Fragment() {
@@ -30,10 +32,18 @@ class VehicleSelectFragment : Fragment() {
     private val viewModel: DigitalKeyViewModel by viewModels()
 
     private var selectedDevice: BluetoothDevice? = null
+    private var enteredVin = ""
     private var nameFilter = ""
     private var gmcOnlyFilter = false
     private var nearOnlyFilter = false   // rssi > -70
     private var closeOnlyFilter = false  // rssi > -60
+
+    private val qrScanLauncher = registerForActivityResult(ScanContract()) { result ->
+        val raw = result.contents ?: return@registerForActivityResult
+        // Door jamb QR may contain just the VIN or a longer string — extract 17-char VIN
+        val vin = Regex("[A-HJ-NPR-Z0-9]{17}").find(raw.uppercase())?.value ?: return@registerForActivityResult
+        applyVin(vin)
+    }
 
     // OUI prefixes registered to GM and their primary BLE module Tier-1 suppliers
     private val gmcOuiPrefixes = setOf(
@@ -56,6 +66,25 @@ class VehicleSelectFragment : Fragment() {
 
         binding.modelHummerPickup.isChecked = true
 
+        // VIN entry
+        binding.vinInput.addTextChangedListener(object : TextWatcher {
+            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) = Unit
+            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) = Unit
+            override fun afterTextChanged(s: Editable?) {
+                val raw = s?.toString()?.uppercase()?.trim() ?: ""
+                applyVin(raw)
+            }
+        })
+
+        binding.btnScanQr.setOnClickListener {
+            val opts = ScanOptions().apply {
+                setPrompt("Scan the QR code on your vehicle's door jamb")
+                setBeepEnabled(true)
+                setOrientationLocked(false)
+            }
+            qrScanLauncher.launch(opts)
+        }
+
         binding.btnScan.setOnClickListener {
             if (viewModel.isScanning.value) viewModel.stopScan() else viewModel.startScan()
         }
@@ -69,7 +98,7 @@ class VehicleSelectFragment : Fragment() {
                 binding.modelTerrainEv.id    -> GmcEvModel.TERRAIN_EV
                 else                         -> GmcEvModel.HUMMER_EV_PICKUP
             }
-            viewModel.pairDevice(device, model, model.displayName)
+            viewModel.pairDevice(device, model, model.displayName, enteredVin)
             findNavController().popBackStack()
         }
 
@@ -103,7 +132,31 @@ class VehicleSelectFragment : Fragment() {
         viewModel.startScan()
     }
 
+    private fun applyVin(raw: String) {
+        val isValid = raw.length == 17 && raw.matches(Regex("[A-HJ-NPR-Z0-9]{17}"))
+        enteredVin = if (isValid) raw else ""
+        if (binding.vinInput.text?.toString()?.uppercase() != raw) {
+            binding.vinInput.setText(raw)
+            binding.vinInput.setSelection(raw.length)
+        }
+        binding.vinStatus.text = when {
+            raw.isEmpty() -> "Scan the QR code on your door jamb, or enter VIN manually to identify your vehicle"
+            isValid -> "VIN confirmed — BLE scan will highlight your vehicle"
+            else -> "VIN must be 17 characters (A–Z excluding I/O/Q, digits)"
+        }
+        binding.vinStatus.setTextColor(
+            requireContext().getColor(when {
+                isValid -> R.color.status_connected
+                raw.isEmpty() -> R.color.text_hint
+                else -> R.color.status_error
+            })
+        )
+        renderDeviceList(viewModel.scanResults.value)
+    }
+
     private fun applyFilters(devices: List<ScannedDevice>): List<ScannedDevice> = devices.filter { s ->
+        // If a valid VIN is entered, show only devices whose name contains the last 6 VIN chars
+        if (enteredVin.length == 17 && !s.name.contains(enteredVin.takeLast(6), ignoreCase = true)) return@filter false
         if (nameFilter.isNotEmpty() && !s.name.contains(nameFilter, ignoreCase = true)) return@filter false
         if (gmcOnlyFilter && !isGmcDevice(s.device.address)) return@filter false
         if (closeOnlyFilter && s.rssi <= -60) return@filter false
@@ -155,6 +208,8 @@ class VehicleSelectFragment : Fragment() {
         filtered.forEach { scanned ->
             val isSelected = selectedDevice?.address == scanned.device.address
             val isGmc = isGmcDevice(scanned.device.address)
+            val isVinMatch = enteredVin.length == 17 &&
+                scanned.name.contains(enteredVin.takeLast(6), ignoreCase = true)
 
             val card = MaterialCardView(requireContext()).apply {
                 layoutParams = LinearLayout.LayoutParams(
@@ -186,10 +241,13 @@ class VehicleSelectFragment : Fragment() {
             }
 
             textBlock.addView(TextView(requireContext()).apply {
-                text = if (isGmc) "★ ${scanned.name}" else scanned.name
-                setTextColor(requireContext().getColor(
-                    if (isGmc) R.color.gmc_red else R.color.text_primary
-                ))
+                val prefix = when { isVinMatch -> "✓ "; isGmc -> "★ "; else -> "" }
+                text = "$prefix${scanned.name}"
+                setTextColor(requireContext().getColor(when {
+                    isVinMatch -> R.color.status_connected
+                    isGmc -> R.color.gmc_red
+                    else -> R.color.text_primary
+                }))
                 textSize = 14f
                 setTypeface(null, Typeface.BOLD)
             })
@@ -198,7 +256,14 @@ class VehicleSelectFragment : Fragment() {
                 setTextColor(requireContext().getColor(R.color.text_secondary))
                 textSize = 12f
             })
-            if (isGmc) {
+            if (isVinMatch) {
+                textBlock.addView(TextView(requireContext()).apply {
+                    text = "Your vehicle (VIN match)"
+                    setTextColor(requireContext().getColor(R.color.status_connected))
+                    textSize = 11f
+                    setTypeface(null, Typeface.BOLD)
+                })
+            } else if (isGmc) {
                 textBlock.addView(TextView(requireContext()).apply {
                     text = "GM vehicle detected"
                     setTextColor(requireContext().getColor(R.color.gmc_red))

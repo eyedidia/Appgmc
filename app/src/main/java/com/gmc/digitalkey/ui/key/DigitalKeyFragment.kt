@@ -109,7 +109,7 @@ class DigitalKeyFragment : Fragment() {
                 setTextColor(requireContext().getColor(R.color.text_primary))
             }
             cardView.findViewById<android.widget.TextView>(android.R.id.text2)?.apply {
-                text = "${vehicle.bleAddress} • ${vehicle.vinPrefix}***"
+                text = if (vehicle.vin.isNotEmpty()) "${vehicle.bleAddress} • ${vehicle.vin}" else vehicle.bleAddress
                 setTextColor(requireContext().getColor(R.color.text_secondary))
             }
             cardView.setOnLongClickListener {

@@ -6,7 +6,7 @@ data class PairedVehicle(
     val model: GmcEvModel,
     val year: Int,
     val bleAddress: String,
-    val vinPrefix: String,
+    val vin: String,
     val passiveUnlockEnabled: Boolean = false
 )
 

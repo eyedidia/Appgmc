@@ -10,7 +10,7 @@ data class VehicleEntity(
     val modelKey: String,       // e.g. "hummer_ev_pickup", "sierra_ev"
     val year: Int,
     val bleAddress: String,
-    val vinPrefix: String,
+    val vin: String,                 // full 17-char VIN (empty if not provided at pairing)
     val publicKeyBytes: ByteArray,
     val pairedAt: Long = System.currentTimeMillis(),
     val passiveUnlockEnabled: Boolean = false,

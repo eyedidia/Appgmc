@@ -41,7 +41,7 @@ class SettingsFragment : Fragment() {
                 if (vehicle != null) {
                     binding.vehicleNameValue.text = vehicle.displayName
                     binding.vehicleModelValue.text = GmcEvModel.fromKey(vehicle.modelKey).displayName
-                    binding.vehicleVinValue.text = "${vehicle.vinPrefix}***"
+                    binding.vehicleVinValue.text = vehicle.vin.ifEmpty { "Not provided" }
                     binding.passiveUnlockSwitch.isChecked = vehicle.passiveUnlockEnabled
                 } else {
                     binding.vehicleNameValue.text = "—"

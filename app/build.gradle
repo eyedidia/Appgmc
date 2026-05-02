@@ -64,6 +64,9 @@ dependencies {
     // Preferences / DataStore
     implementation 'androidx.preference:preference-ktx:1.2.1'
 
+    // QR / barcode scanning for VIN pairing
+    implementation 'com.journeyapps:zxing-android-embedded:4.3.0'
+
     // Test
     testImplementation 'junit:junit:4.13.2'
     androidTestImplementation 'androidx.test.ext:junit:1.1.5'
