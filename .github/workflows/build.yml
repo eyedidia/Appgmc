@@ -30,8 +30,43 @@ jobs:
       - name: Make gradlew executable
         run: chmod +x gradlew
 
+      - name: KSP / Room annotation processing
+        id: ksp
+        run: ./gradlew kspDebugKotlin --no-daemon --stacktrace 2>&1 | tee ksp.log; exit ${PIPESTATUS[0]}
+        continue-on-error: true
+
+      - name: Print KSP errors
+        if: steps.ksp.outcome == 'failure'
+        run: |
+          echo "=== KSP FAILED — errors below ==="
+          grep -E "^e: |error:|ERROR|Exception|FAILED" ksp.log | head -80 || true
+          echo "=== LAST 60 LINES ==="
+          tail -60 ksp.log
+
+      - name: Compile Kotlin
+        id: kotlinc
+        run: ./gradlew compileDebugKotlin --no-daemon --stacktrace 2>&1 | tee kotlinc.log; exit ${PIPESTATUS[0]}
+        continue-on-error: true
+
+      - name: Print Kotlin compiler errors
+        if: steps.kotlinc.outcome == 'failure'
+        run: |
+          echo "=== KOTLIN COMPILE FAILED — errors below ==="
+          grep -E "^e: |error:|ERROR|Exception|FAILED|unresolved|None of the following" kotlinc.log | head -80 || true
+          echo "=== LAST 60 LINES ==="
+          tail -60 kotlinc.log
+
       - name: Build Debug APK
-        run: ./gradlew assembleDebug --no-daemon --stacktrace --info 2>&1 | tee build.log; exit ${PIPESTATUS[0]}
+        id: build
+        run: ./gradlew assembleDebug --no-daemon --stacktrace 2>&1 | tee build.log; exit ${PIPESTATUS[0]}
+
+      - name: Print build errors on failure
+        if: failure() && steps.build.outcome == 'failure'
+        run: |
+          echo "=== BUILD FAILED — compiler errors ==="
+          grep -E "^e: |error: |ERROR|Unresolved reference|None of the following|overload resolution" build.log | head -80 || true
+          echo "=== LAST 80 LINES ==="
+          tail -80 build.log
 
       - name: Run unit tests
         run: ./gradlew testDebugUnitTest --no-daemon --stacktrace
@@ -39,24 +74,19 @@ jobs:
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
-        if: always()
+        if: success()
         with:
           name: app-debug
           path: app/build/outputs/apk/debug/app-debug.apk
           retention-days: 7
 
-      - name: Upload build log
+      - name: Upload logs on failure
         uses: actions/upload-artifact@v4
-        if: always()
+        if: failure()
         with:
-          name: build-log
-          path: build.log
-          retention-days: 7
-
-      - name: Upload test reports
-        uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: test-results
-          path: app/build/reports/tests/
+          name: build-logs
+          path: |
+            build.log
+            ksp.log
+            kotlinc.log
           retention-days: 7
