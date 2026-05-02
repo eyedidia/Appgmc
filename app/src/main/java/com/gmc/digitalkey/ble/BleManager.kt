@@ -47,33 +47,58 @@ class BleManager(private val context: Context) {
 
     // ─── Scanning ─────────────────────────────────────────────────────────────
 
+    // Scan all nearby BLE devices (for pairing UI — no UUID filter)
+    fun scanAll(onFound: (BluetoothDevice, Int) -> Unit, onStopped: () -> Unit = {}) {
+        if (!isBluetoothOn) { _connectionState.value = BleConnectionState.BluetoothOff; return }
+        if (!hasScanPermission()) { _connectionState.value = BleConnectionState.PermissionDenied; return }
+        _connectionState.value = BleConnectionState.Scanning
+        scanner = adapter.bluetoothLeScanner
+
+        val settings = ScanSettings.Builder()
+            .setScanMode(ScanSettings.SCAN_MODE_LOW_LATENCY)
+            .build()
+
+        scanner?.startScan(null, settings, object : ScanCallback() {
+            override fun onScanResult(callbackType: Int, result: ScanResult) {
+                onFound(result.device, result.rssi)
+            }
+            override fun onScanFailed(errorCode: Int) {
+                _connectionState.value = BleConnectionState.Error("BLE scan failed: $errorCode")
+                onStopped()
+            }
+        })
+
+        handler.postDelayed({
+            stopScan()
+            onStopped()
+        }, 30_000)
+    }
+
+    // Scan for a specific paired vehicle address (used by PassiveUnlockService)
     fun scanForVehicle(targetAddress: String? = null, onFound: (BluetoothDevice) -> Unit) {
         if (!isBluetoothOn) { _connectionState.value = BleConnectionState.BluetoothOff; return }
         if (!hasScanPermission()) { _connectionState.value = BleConnectionState.PermissionDenied; return }
         _connectionState.value = BleConnectionState.Scanning
         scanner = adapter.bluetoothLeScanner
 
-        val filter = ScanFilter.Builder()
-            .apply { if (targetAddress != null) setDeviceAddress(targetAddress) }
-            .setServiceUuid(android.os.ParcelUuid(VehicleGattProfile.SERVICE_UUID))
-            .build()
+        val filters = if (targetAddress != null)
+            listOf(ScanFilter.Builder().setDeviceAddress(targetAddress).build())
+        else null
 
         val settings = ScanSettings.Builder()
             .setScanMode(ScanSettings.SCAN_MODE_LOW_LATENCY)
             .build()
 
-        scanner?.startScan(listOf(filter), settings, object : ScanCallback() {
+        scanner?.startScan(filters, settings, object : ScanCallback() {
             override fun onScanResult(callbackType: Int, result: ScanResult) {
                 stopScan()
                 onFound(result.device)
             }
-
             override fun onScanFailed(errorCode: Int) {
                 _connectionState.value = BleConnectionState.Error("BLE scan failed: $errorCode")
             }
         })
 
-        // Auto-stop scan after 30s
         handler.postDelayed({ stopScan() }, 30_000)
     }
 
