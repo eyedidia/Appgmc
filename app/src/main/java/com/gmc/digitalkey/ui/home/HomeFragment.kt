@@ -1,7 +1,5 @@
 package com.gmc.digitalkey.ui.home
 
-import android.bluetooth.BluetoothManager
-import android.content.Context
 import android.content.Intent
 import android.os.Bundle
 import android.provider.Settings
@@ -12,11 +10,13 @@ import android.view.animation.AnimationUtils
 import androidx.fragment.app.Fragment
 import androidx.fragment.app.viewModels
 import androidx.lifecycle.lifecycleScope
+import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.gmc.digitalkey.R
 import com.gmc.digitalkey.ble.BleConnectionState
 import com.gmc.digitalkey.databinding.FragmentHomeBinding
 import com.gmc.digitalkey.model.EngineState
 import com.gmc.digitalkey.model.LockState
+import com.gmc.digitalkey.model.PairedVehicle
 import kotlinx.coroutines.launch
 
 class HomeFragment : Fragment() {
@@ -48,21 +48,50 @@ class HomeFragment : Fragment() {
         binding.errorActionBtn.setOnClickListener {
             startActivity(Intent(Settings.ACTION_BLUETOOTH_SETTINGS))
         }
+        binding.vehicleSelector.setOnClickListener {
+            showVehiclePicker()
+        }
+    }
+
+    private fun showVehiclePicker() {
+        val vehicles = viewModel.pairedVehicles.value
+        if (vehicles.size <= 1) return
+        val activeId = viewModel.activeVehicle.value?.id
+        val names = vehicles.map { v ->
+            val vin = if (v.vin.length == 17) " · ${v.vin.takeLast(6)}" else ""
+            "${v.displayName}$vin"
+        }.toTypedArray()
+        val checkedIndex = vehicles.indexOfFirst { it.id == activeId }.coerceAtLeast(0)
+
+        MaterialAlertDialogBuilder(requireContext())
+            .setTitle("Switch Vehicle")
+            .setSingleChoiceItems(names, checkedIndex) { dialog, which ->
+                viewModel.selectVehicle(vehicles[which].id)
+                dialog.dismiss()
+            }
+            .setNegativeButton("Cancel", null)
+            .show()
     }
 
     private fun observeState() {
         viewLifecycleOwner.lifecycleScope.launch {
+            viewModel.pairedVehicles.collect { vehicles ->
+                binding.vehicleSwitchHint.visibility =
+                    if (vehicles.size > 1) View.VISIBLE else View.GONE
+            }
+        }
+
+        viewLifecycleOwner.lifecycleScope.launch {
             viewModel.activeVehicle.collect { vehicle ->
                 if (vehicle == null) {
                     binding.noVehicleText.visibility = View.VISIBLE
-                    binding.vehicleName.visibility = View.GONE
+                    binding.vehicleSelector.visibility = View.GONE
                     binding.actionButtons.visibility = View.GONE
                 } else {
                     binding.noVehicleText.visibility = View.GONE
-                    binding.vehicleName.visibility = View.VISIBLE
+                    binding.vehicleSelector.visibility = View.VISIBLE
                     binding.actionButtons.visibility = View.VISIBLE
                     binding.vehicleName.text = vehicle.displayName
-                    // Auto-connect on first observation
                     if (!viewModel.connectionState.value.isConnected) {
                         viewModel.connectToVehicle(vehicle)
                     }

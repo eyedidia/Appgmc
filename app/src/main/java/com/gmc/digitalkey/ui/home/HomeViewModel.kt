@@ -1,6 +1,7 @@
 package com.gmc.digitalkey.ui.home
 
 import android.app.Application
+import android.content.Context
 import android.os.Handler
 import android.os.Looper
 import androidx.lifecycle.AndroidViewModel
@@ -18,6 +19,7 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
 
     val bleManager = BleManager(app)
     private val db = AppDatabase.get(app)
+    private val prefs = app.getSharedPreferences("gmc_prefs", Context.MODE_PRIVATE)
     private val rssiHandler = Handler(Looper.getMainLooper())
 
     val connectionState: StateFlow<BleConnectionState> = bleManager.connectionState
@@ -26,11 +28,13 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
     private val _activeVehicle = MutableStateFlow<PairedVehicle?>(null)
     val activeVehicle: StateFlow<PairedVehicle?> = _activeVehicle.asStateFlow()
 
+    private val _pairedVehicles = MutableStateFlow<List<PairedVehicle>>(emptyList())
+    val pairedVehicles: StateFlow<List<PairedVehicle>> = _pairedVehicles.asStateFlow()
+
     init {
         viewModelScope.launch {
             db.vehicleDao().observeAll().collect { entities ->
-                val entity = entities.firstOrNull()
-                _activeVehicle.value = entity?.let {
+                val vehicles = entities.map {
                     PairedVehicle(
                         id = it.id,
                         displayName = it.displayName,
@@ -41,9 +45,27 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
                         passiveUnlockEnabled = it.passiveUnlockEnabled
                     )
                 }
+                _pairedVehicles.value = vehicles
+
+                // Restore last selected vehicle, fall back to first
+                val savedId = prefs.getString("active_vehicle_id", null)
+                val active = vehicles.firstOrNull { it.id == savedId } ?: vehicles.firstOrNull()
+                if (active != null && active.id != _activeVehicle.value?.id) {
+                    _activeVehicle.value = active
+                } else if (active == null) {
+                    _activeVehicle.value = null
+                }
             }
         }
         startRssiPolling()
+    }
+
+    fun selectVehicle(vehicleId: String) {
+        val vehicle = _pairedVehicles.value.firstOrNull { it.id == vehicleId } ?: return
+        prefs.edit().putString("active_vehicle_id", vehicleId).apply()
+        _activeVehicle.value = vehicle
+        bleManager.disconnect()
+        connectToVehicle(vehicle)
     }
 
     fun connectToVehicle(vehicle: PairedVehicle) {

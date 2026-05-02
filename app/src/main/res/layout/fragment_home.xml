@@ -51,20 +51,42 @@
             tools:text="Connected" />
     </LinearLayout>
 
-    <!-- Vehicle name -->
-    <TextView
-        android:id="@+id/vehicle_name"
+    <!-- Vehicle selector (tappable row) -->
+    <LinearLayout
+        android:id="@+id/vehicle_selector"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:text="Hummer EV Pickup"
-        android:textColor="@color/text_primary"
-        android:textSize="22sp"
-        android:fontFamily="sans-serif-medium"
+        android:orientation="horizontal"
+        android:gravity="center_vertical"
+        android:padding="8dp"
+        android:background="?attr/selectableItemBackground"
+        android:clickable="true"
+        android:focusable="true"
         app:layout_constraintTop_toBottomOf="@id/gmc_logo"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintEnd_toEndOf="parent"
-        android:layout_marginTop="32dp"
-        tools:text="Hummer EV Pickup" />
+        android:layout_marginTop="24dp">
+
+        <TextView
+            android:id="@+id/vehicle_name"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Hummer EV Pickup"
+            android:textColor="@color/text_primary"
+            android:textSize="22sp"
+            android:fontFamily="sans-serif-medium"
+            tools:text="Hummer EV Pickup" />
+
+        <TextView
+            android:id="@+id/vehicle_switch_hint"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text=" ▾"
+            android:textColor="@color/text_hint"
+            android:textSize="18sp"
+            android:visibility="gone" />
+
+    </LinearLayout>
 
     <!-- Vehicle silhouette -->
     <ImageView
@@ -74,7 +96,7 @@
         android:src="@drawable/ic_car_hummer"
         android:contentDescription="Vehicle"
         android:scaleType="fitCenter"
-        app:layout_constraintTop_toBottomOf="@id/vehicle_name"
+        app:layout_constraintTop_toBottomOf="@id/vehicle_selector"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintEnd_toEndOf="parent"
         android:layout_marginTop="16dp"
