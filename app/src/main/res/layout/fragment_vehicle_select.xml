@@ -42,6 +42,7 @@
                 android:orientation="vertical"
                 android:padding="16dp">
 
+                <!-- Scan controls row -->
                 <LinearLayout
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
@@ -77,6 +78,80 @@
                         android:paddingStart="12dp"
                         android:paddingEnd="12dp" />
                 </LinearLayout>
+
+                <!-- Filter row -->
+                <com.google.android.material.textfield.TextInputLayout
+                    android:id="@+id/filter_layout"
+                    style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox.Dense"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginBottom="10dp"
+                    android:hint="Filter by name…"
+                    app:boxStrokeColor="@color/gmc_red"
+                    app:hintTextColor="@color/text_hint"
+                    app:startIconDrawable="@android:drawable/ic_menu_search"
+                    app:startIconTint="@color/text_hint">
+
+                    <com.google.android.material.textfield.TextInputEditText
+                        android:id="@+id/filter_input"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:textColor="@color/text_primary"
+                        android:textSize="13sp"
+                        android:inputType="text"
+                        android:imeOptions="actionDone"
+                        android:maxLines="1" />
+                </com.google.android.material.textfield.TextInputLayout>
+
+                <!-- Filter chips row -->
+                <com.google.android.material.chip.ChipGroup
+                    android:id="@+id/chip_group_filters"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginBottom="12dp"
+                    app:singleSelection="false"
+                    app:selectionRequired="false">
+
+                    <com.google.android.material.chip.Chip
+                        android:id="@+id/chip_gmc_only"
+                        style="@style/Widget.MaterialComponents.Chip.Filter"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="GMC only"
+                        android:textSize="12sp"
+                        app:chipBackgroundColor="@color/bg_elevated"
+                        app:chipStrokeColor="@color/gmc_red"
+                        app:chipStrokeWidth="1dp"
+                        app:checkedIconTint="@color/gmc_red"
+                        android:textColor="@color/text_secondary" />
+
+                    <com.google.android.material.chip.Chip
+                        android:id="@+id/chip_near_only"
+                        style="@style/Widget.MaterialComponents.Chip.Filter"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="Near only (>−70 dBm)"
+                        android:textSize="12sp"
+                        app:chipBackgroundColor="@color/bg_elevated"
+                        app:chipStrokeColor="@color/gmc_red"
+                        app:chipStrokeWidth="1dp"
+                        app:checkedIconTint="@color/gmc_red"
+                        android:textColor="@color/text_secondary" />
+
+                    <com.google.android.material.chip.Chip
+                        android:id="@+id/chip_close_only"
+                        style="@style/Widget.MaterialComponents.Chip.Filter"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="Very close (>−60 dBm)"
+                        android:textSize="12sp"
+                        app:chipBackgroundColor="@color/bg_elevated"
+                        app:chipStrokeColor="@color/gmc_red"
+                        app:chipStrokeWidth="1dp"
+                        app:checkedIconTint="@color/gmc_red"
+                        android:textColor="@color/text_secondary" />
+
+                </com.google.android.material.chip.ChipGroup>
 
                 <!-- Devices list -->
                 <TextView

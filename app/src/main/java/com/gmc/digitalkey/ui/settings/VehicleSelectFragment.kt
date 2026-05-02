@@ -4,6 +4,8 @@ import android.annotation.SuppressLint
 import android.bluetooth.BluetoothDevice
 import android.graphics.Typeface
 import android.os.Bundle
+import android.text.Editable
+import android.text.TextWatcher
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
@@ -28,6 +30,21 @@ class VehicleSelectFragment : Fragment() {
     private val viewModel: DigitalKeyViewModel by viewModels()
 
     private var selectedDevice: BluetoothDevice? = null
+    private var nameFilter = ""
+    private var gmcOnlyFilter = false
+    private var nearOnlyFilter = false   // rssi > -70
+    private var closeOnlyFilter = false  // rssi > -60
+
+    // OUI prefixes registered to GM and their primary BLE module Tier-1 suppliers
+    private val gmcOuiPrefixes = setOf(
+        "B4:DE:31",  // General Motors LLC
+        "04:E6:76",  // Continental Automotive Technologies
+        "AC:23:3F",  // Aptiv Solutions (ex-Delphi)
+        "04:52:C7",  // Aptiv Services
+        "74:F0:7D",  // Continental Automotive
+        "20:CD:39",  // Harman International
+        "C4:6E:1F",  // Harman/Becker Automotive
+    )
 
     override fun onCreateView(inflater: LayoutInflater, container: ViewGroup?, savedInstanceState: Bundle?): View {
         _binding = FragmentVehicleSelectBinding.inflate(inflater, container, false)
@@ -37,7 +54,6 @@ class VehicleSelectFragment : Fragment() {
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
 
-        // Pre-select first model so user only needs to pick a device
         binding.modelHummerPickup.isChecked = true
 
         binding.btnScan.setOnClickListener {
@@ -57,9 +73,46 @@ class VehicleSelectFragment : Fragment() {
             findNavController().popBackStack()
         }
 
+        binding.filterInput.addTextChangedListener(object : TextWatcher {
+            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) = Unit
+            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) = Unit
+            override fun afterTextChanged(s: Editable?) {
+                nameFilter = s?.toString()?.trim() ?: ""
+                renderDeviceList(viewModel.scanResults.value)
+            }
+        })
+
+        binding.chipGmcOnly.setOnCheckedChangeListener { _, checked ->
+            gmcOnlyFilter = checked
+            renderDeviceList(viewModel.scanResults.value)
+        }
+
+        binding.chipNearOnly.setOnCheckedChangeListener { _, checked ->
+            nearOnlyFilter = checked
+            if (checked) { closeOnlyFilter = false; binding.chipCloseOnly.isChecked = false }
+            renderDeviceList(viewModel.scanResults.value)
+        }
+
+        binding.chipCloseOnly.setOnCheckedChangeListener { _, checked ->
+            closeOnlyFilter = checked
+            if (checked) { nearOnlyFilter = false; binding.chipNearOnly.isChecked = false }
+            renderDeviceList(viewModel.scanResults.value)
+        }
+
         observeState()
         viewModel.startScan()
     }
+
+    private fun applyFilters(devices: List<ScannedDevice>): List<ScannedDevice> = devices.filter { s ->
+        if (nameFilter.isNotEmpty() && !s.name.contains(nameFilter, ignoreCase = true)) return@filter false
+        if (gmcOnlyFilter && !isGmcDevice(s.device.address)) return@filter false
+        if (closeOnlyFilter && s.rssi <= -60) return@filter false
+        if (nearOnlyFilter && s.rssi <= -70) return@filter false
+        true
+    }
+
+    private fun isGmcDevice(address: String) =
+        gmcOuiPrefixes.any { address.uppercase().startsWith(it) }
 
     private fun observeState() {
         viewLifecycleOwner.lifecycleScope.launch {
@@ -71,12 +124,13 @@ class VehicleSelectFragment : Fragment() {
 
         viewLifecycleOwner.lifecycleScope.launch {
             viewModel.scanResults.collect { results ->
-                val count = results.size
+                val shown = applyFilters(results).size
+                val total = results.size
                 binding.scanStatusText.text = when {
-                    viewModel.isScanning.value && count == 0 -> "Scanning for vehicles…"
-                    viewModel.isScanning.value               -> "Scanning… ($count found)"
-                    count == 0                               -> "No devices found — try Scan Again"
-                    else                                     -> "$count device${if (count > 1) "s" else ""} found"
+                    viewModel.isScanning.value && total == 0 -> "Scanning for vehicles…"
+                    viewModel.isScanning.value -> "Scanning… ($total found, $shown shown)"
+                    total == 0 -> "No devices found — try Scan Again"
+                    else -> "$shown of $total device${if (total > 1) "s" else ""} shown"
                 }
                 renderDeviceList(results)
             }
@@ -85,16 +139,22 @@ class VehicleSelectFragment : Fragment() {
 
     @SuppressLint("MissingPermission", "SetTextI18n")
     private fun renderDeviceList(devices: List<ScannedDevice>) {
+        val filtered = applyFilters(devices)
         binding.devicesContainer.removeAllViews()
 
-        if (devices.isEmpty()) {
+        if (filtered.isEmpty()) {
+            binding.noDevicesHint.text = if (devices.isEmpty())
+                "No devices found. Make sure your vehicle's Bluetooth is on."
+            else
+                "No devices match the current filters."
             binding.noDevicesHint.visibility = View.VISIBLE
             return
         }
         binding.noDevicesHint.visibility = View.GONE
 
-        devices.forEach { scanned ->
+        filtered.forEach { scanned ->
             val isSelected = selectedDevice?.address == scanned.device.address
+            val isGmc = isGmcDevice(scanned.device.address)
 
             val card = MaterialCardView(requireContext()).apply {
                 layoutParams = LinearLayout.LayoutParams(
@@ -126,8 +186,10 @@ class VehicleSelectFragment : Fragment() {
             }
 
             textBlock.addView(TextView(requireContext()).apply {
-                text = scanned.name
-                setTextColor(requireContext().getColor(R.color.text_primary))
+                text = if (isGmc) "★ ${scanned.name}" else scanned.name
+                setTextColor(requireContext().getColor(
+                    if (isGmc) R.color.gmc_red else R.color.text_primary
+                ))
                 textSize = 14f
                 setTypeface(null, Typeface.BOLD)
             })
@@ -136,6 +198,13 @@ class VehicleSelectFragment : Fragment() {
                 setTextColor(requireContext().getColor(R.color.text_secondary))
                 textSize = 12f
             })
+            if (isGmc) {
+                textBlock.addView(TextView(requireContext()).apply {
+                    text = "GM vehicle detected"
+                    setTextColor(requireContext().getColor(R.color.gmc_red))
+                    textSize = 11f
+                })
+            }
 
             inner.addView(textBlock)
             inner.addView(TextView(requireContext()).apply {
@@ -149,7 +218,6 @@ class VehicleSelectFragment : Fragment() {
 
             card.setOnClickListener {
                 selectedDevice = scanned.device
-                // Stop scan immediately so list stops updating
                 viewModel.stopScan()
                 setPairButtonEnabled(true)
                 renderDeviceList(viewModel.scanResults.value)
