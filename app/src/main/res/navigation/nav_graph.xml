@@ -33,4 +33,9 @@
         android:name="com.gmc.digitalkey.ui.settings.VehicleSelectFragment"
         android:label="@string/select_model" />
 
+    <fragment
+        android:id="@+id/setupGuideFragment"
+        android:name="com.gmc.digitalkey.ui.setup.SetupGuideFragment"
+        android:label="Activate Digital Key" />
+
 </navigation>

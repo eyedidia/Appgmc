@@ -1,6 +1,7 @@
 package com.gmc.digitalkey.ui.home
 
 import android.content.Intent
+import androidx.navigation.fragment.findNavController
 import coil.load
 import android.os.Bundle
 import android.provider.Settings
@@ -51,6 +52,12 @@ class HomeFragment : Fragment() {
         }
         binding.vehicleSelector.setOnClickListener {
             showVehiclePicker()
+        }
+        binding.btnSetupGuide.setOnClickListener {
+            findNavController().navigate(R.id.setupGuideFragment)
+        }
+        binding.btnGoPairDirect.setOnClickListener {
+            findNavController().navigate(R.id.vehicleSelectFragment)
         }
     }
 

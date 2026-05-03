@@ -15,8 +15,8 @@ import androidx.fragment.app.Fragment
 import androidx.fragment.app.viewModels
 import androidx.lifecycle.lifecycleScope
 import androidx.navigation.fragment.findNavController
-import com.google.android.material.card.MaterialCardView
 import com.gmc.digitalkey.R
+import com.google.android.material.card.MaterialCardView
 import com.gmc.digitalkey.databinding.FragmentVehicleSelectBinding
 import com.gmc.digitalkey.model.GmcEvModel
 import com.gmc.digitalkey.ui.key.DigitalKeyViewModel
@@ -72,6 +72,10 @@ class VehicleSelectFragment : Fragment() {
         super.onViewCreated(view, savedInstanceState)
 
         binding.modelHummerPickup.isChecked = true
+
+        binding.btnShowGuide.setOnClickListener {
+            findNavController().navigate(R.id.setupGuideFragment)
+        }
 
         // VIN entry
         binding.vinInput.addTextChangedListener(object : TextWatcher {
