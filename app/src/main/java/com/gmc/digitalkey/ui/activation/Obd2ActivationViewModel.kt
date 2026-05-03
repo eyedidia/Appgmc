@@ -23,13 +23,16 @@ sealed class Obd2ActivationState {
     data class Connecting(val device: BluetoothDevice) : Obd2ActivationState()
     object InitializingAdapter : Obd2ActivationState()
     object ReadingVin : Obd2ActivationState()
+    object DiscoveringEcus : Obd2ActivationState()
     data class VinMismatch(val fromObd: String, val storedVin: String) : Obd2ActivationState()
     object ActivatingBle : Obd2ActivationState()
-    object ActivationSuccess : Obd2ActivationState()
+    data class ActivationSuccess(val vcimAddress: Int) : Obd2ActivationState()
     data class ActivationError(val message: String, val recoverable: Boolean = true) : Obd2ActivationState()
-    object NeedsSecurityKey : Obd2ActivationState()
+    data class NeedsSecurityKey(val vcimAddress: Int, val seed: ByteArray) : Obd2ActivationState()
     object UnsupportedModel : Obd2ActivationState()
-    data class DiagnosticMode(val didMap: Map<String, String>) : Obd2ActivationState()
+    data class DiagnosticMode(val vcimAddress: Int, val didMap: Map<String, String>) : Obd2ActivationState()
+    // AT terminal state — appended to the current log, doesn't replace main state
+    data class AtTerminalResult(val cmd: String, val response: String) : Obd2ActivationState()
 }
 
 class Obd2ActivationViewModel(app: Application) : AndroidViewModel(app) {
@@ -43,8 +46,13 @@ class Obd2ActivationViewModel(app: Application) : AndroidViewModel(app) {
     private val _foundAdapters = MutableStateFlow<List<BluetoothDevice>>(emptyList())
     val foundAdapters: StateFlow<List<BluetoothDevice>> = _foundAdapters.asStateFlow()
 
+    // AT terminal history
+    private val _terminalLog = MutableStateFlow<List<Pair<String, String>>>(emptyList())
+    val terminalLog: StateFlow<List<Pair<String, String>>> = _terminalLog.asStateFlow()
+
     private var storedVin: String = ""
     private var vehicleId: String = ""
+    private var discoveredVcimAddress: Int = 0x7E3
 
     fun loadVehicleVin(id: String) {
         vehicleId = id
@@ -62,7 +70,7 @@ class Obd2ActivationViewModel(app: Application) : AndroidViewModel(app) {
             onStopped = {
                 if (_foundAdapters.value.isEmpty()) {
                     _uiState.value = Obd2ActivationState.ActivationError(
-                        "No OBD2 adapter found nearby.\nMake sure the ELM327 adapter is plugged into the OBD2 port and phone Bluetooth is on.",
+                        "No OBD2 adapter found nearby.\nMake sure the ELM327 adapter is plugged into the OBD2 port (under the dashboard) and phone Bluetooth is on.",
                         recoverable = true
                     )
                 }
@@ -80,17 +88,10 @@ class Obd2ActivationViewModel(app: Application) : AndroidViewModel(app) {
     fun connectAndActivate(device: BluetoothDevice) {
         _uiState.value = Obd2ActivationState.Connecting(device)
         obd2Manager.connect(device)
-
         viewModelScope.launch {
-            // Wait until GATT connects and subscribes to notifications
-            val readyState = obd2Manager.state
-                .filter { it !is Obd2State.Connecting }
-                .first()
-
+            val readyState = obd2Manager.state.filter { it !is Obd2State.Connecting }.first()
             if (readyState is Obd2State.Error || readyState is Obd2State.Disconnected) {
-                _uiState.value = Obd2ActivationState.ActivationError(
-                    "Failed to connect to OBD2 adapter."
-                )
+                _uiState.value = Obd2ActivationState.ActivationError("Failed to connect to OBD2 adapter.")
                 return@launch
             }
             runActivationSequence()
@@ -108,47 +109,52 @@ class Obd2ActivationViewModel(app: Application) : AndroidViewModel(app) {
 
         _uiState.value = Obd2ActivationState.ReadingVin
         val obdVin = obd2Manager.readVin()
-
         if (obdVin != null && storedVin.length == 17 && !obdVin.equals(storedVin, ignoreCase = true)) {
             _uiState.value = Obd2ActivationState.VinMismatch(obdVin, storedVin)
             return
         }
-
-        // If no VIN stored yet, save it from OBD
         if (obdVin != null && vehicleId.isNotEmpty()) {
-            val entity = db.vehicleDao().getById(vehicleId)
-            if (entity != null && entity.vin.isEmpty()) {
-                db.vehicleDao().update(entity.copy(vin = obdVin))
+            db.vehicleDao().getById(vehicleId)?.let { entity ->
+                if (entity.vin.isEmpty()) db.vehicleDao().update(entity.copy(vin = obdVin))
             }
         }
+
+        _uiState.value = Obd2ActivationState.DiscoveringEcus
+        val ecus = GmVcimActivation.discoverEcus(obd2Manager)
+        discoveredVcimAddress = GmVcimActivation.findVcimAddress(obd2Manager, ecus)
 
         activateBle()
     }
 
     fun proceedAfterVinMismatch() {
-        viewModelScope.launch { activateBle() }
+        viewModelScope.launch {
+            _uiState.value = Obd2ActivationState.DiscoveringEcus
+            val ecus = GmVcimActivation.discoverEcus(obd2Manager)
+            discoveredVcimAddress = GmVcimActivation.findVcimAddress(obd2Manager, ecus)
+            activateBle()
+        }
     }
 
     private suspend fun activateBle() {
         _uiState.value = Obd2ActivationState.ActivatingBle
-        when (val result = GmVcimActivation.activateDigitalKeyBle(obd2Manager)) {
+        when (val result = GmVcimActivation.activateDigitalKeyBle(obd2Manager, discoveredVcimAddress)) {
             is GmVcimActivation.ActivationResult.Success -> {
                 if (vehicleId.isNotEmpty()) {
                     db.vehicleDao().getById(vehicleId)?.let {
                         db.vehicleDao().update(it.copy(activationMethod = "obd2"))
                     }
                 }
-                _uiState.value = Obd2ActivationState.ActivationSuccess
+                _uiState.value = Obd2ActivationState.ActivationSuccess(result.vcimAddress)
             }
             is GmVcimActivation.ActivationResult.NeedsSecurityKey ->
-                _uiState.value = Obd2ActivationState.NeedsSecurityKey
+                _uiState.value = Obd2ActivationState.NeedsSecurityKey(result.vcimAddress, result.seed)
             is GmVcimActivation.ActivationResult.UnsupportedModel ->
                 _uiState.value = Obd2ActivationState.UnsupportedModel
             is GmVcimActivation.ActivationResult.DiagnosticData -> {
                 val readable = result.readDids.mapValues { (_, v) ->
                     v.joinToString(" ") { "%02X".format(it) }
                 }
-                _uiState.value = Obd2ActivationState.DiagnosticMode(readable)
+                _uiState.value = Obd2ActivationState.DiagnosticMode(result.vcimAddress, readable)
             }
             is GmVcimActivation.ActivationResult.CommunicationError ->
                 _uiState.value = Obd2ActivationState.ActivationError(result.detail)
@@ -158,12 +164,58 @@ class Obd2ActivationViewModel(app: Application) : AndroidViewModel(app) {
     fun runDiagnosticDump() {
         viewModelScope.launch {
             _uiState.value = Obd2ActivationState.ActivatingBle
-            val results = GmVcimActivation.discoverVcimDids(obd2Manager)
-            val readable = results.mapValues { (_, v) ->
-                v.joinToString(" ") { "%02X".format(it) }
-            }
-            _uiState.value = Obd2ActivationState.DiagnosticMode(readable)
+            val dids = GmVcimActivation.discoverVcimDids(obd2Manager, discoveredVcimAddress)
+            val readable = dids.mapValues { (_, v) -> v.joinToString(" ") { "%02X".format(it) } }
+            _uiState.value = Obd2ActivationState.DiagnosticMode(discoveredVcimAddress, readable)
         }
+    }
+
+    // AT command terminal — sends raw AT or OBD command, appends to history
+    fun sendAtCommand(cmd: String) {
+        if (cmd.isBlank()) return
+        viewModelScope.launch {
+            val response = try {
+                obd2Manager.sendCommand(cmd.trim().uppercase())
+            } catch (e: Exception) {
+                "ERROR: ${e.message}"
+            }
+            val entry = cmd.trim().uppercase() to response
+            _terminalLog.value = _terminalLog.value + entry
+        }
+    }
+
+    fun clearTerminalLog() {
+        _terminalLog.value = emptyList()
+    }
+
+    // Build exportable text for clipboard sharing
+    fun buildExportText(state: Obd2ActivationState): String {
+        val sb = StringBuilder()
+        sb.appendLine("=== YMGMC OBD2 Diagnostic Export ===")
+        sb.appendLine("VCIM address: 0x${discoveredVcimAddress.toString(16).uppercase()}")
+        if (storedVin.isNotEmpty()) sb.appendLine("VIN: $storedVin")
+
+        when (state) {
+            is Obd2ActivationState.DiagnosticMode -> {
+                sb.appendLine("VCIM: 0x${state.vcimAddress.toString(16).uppercase()}")
+                sb.appendLine("--- Readable DIDs ---")
+                state.didMap.forEach { (k, v) -> sb.appendLine("$k = $v") }
+            }
+            is Obd2ActivationState.NeedsSecurityKey -> {
+                sb.appendLine("VCIM: 0x${state.vcimAddress.toString(16).uppercase()}")
+                sb.appendLine("SecurityAccess seed: ${state.seed.joinToString(" ") { "%02X".format(it) }}")
+            }
+            else -> {}
+        }
+
+        if (_terminalLog.value.isNotEmpty()) {
+            sb.appendLine("--- AT Terminal Log ---")
+            _terminalLog.value.forEach { (cmd, resp) ->
+                sb.appendLine("> $cmd")
+                sb.appendLine(resp)
+            }
+        }
+        return sb.toString()
     }
 
     override fun onCleared() {
