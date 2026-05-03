@@ -216,11 +216,29 @@
         <TextView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
+            android:text="— OR —"
+            android:textColor="@color/text_hint"
+            android:textSize="12sp"
+            android:gravity="center"
+            android:layout_marginTop="12dp"
+            android:layout_marginBottom="8dp" />
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btn_obd2_bypass"
+            style="@style/Widget.GMC.Button.Outlined"
+            android:layout_width="match_parent"
+            android:layout_height="52dp"
+            android:text="Advanced: Bypass via OBD2 Port"
+            android:layout_marginBottom="8dp" />
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
             android:text="YMGMC connects locally via Bluetooth after OnStar activation. Lock/unlock commands require the vehicle to accept this app's connection key."
             android:textColor="@color/text_hint"
             android:textSize="11sp"
             android:gravity="center"
-            android:layout_marginTop="20dp" />
+            android:layout_marginTop="12dp" />
 
     </LinearLayout>
 </androidx.core.widget.NestedScrollView>

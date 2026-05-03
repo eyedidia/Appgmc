@@ -17,7 +17,8 @@ data class VehicleEntity(
     val passiveUnlockEnabled: Boolean = false,
     val lastKnownSoc: Int = -1,
     val lastKnownRangeKm: Int = -1,
-    val lastSeenAt: Long = 0L
+    val lastSeenAt: Long = 0L,
+    val activationMethod: String = "onstar" // "onstar" | "obd2" | "unknown"
 ) {
     override fun equals(other: Any?): Boolean {
         if (this === other) return true

@@ -1,0 +1,185 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.core.widget.NestedScrollView
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@color/bg_primary">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:padding="20dp">
+
+        <ImageView
+            android:layout_width="wrap_content"
+            android:layout_height="36dp"
+            android:src="@drawable/ic_gmc_logo"
+            android:contentDescription="GMC"
+            android:layout_marginBottom="16dp" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="OBD2 Activation"
+            android:textColor="@color/text_primary"
+            android:textSize="22sp"
+            android:fontFamily="sans-serif-medium"
+            android:layout_marginBottom="4dp" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Bypass OnStar using the vehicle's OBD2 diagnostic port"
+            android:textColor="@color/text_secondary"
+            android:textSize="14sp"
+            android:layout_marginBottom="20dp" />
+
+        <!-- Step indicators -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:gravity="center"
+            android:layout_marginBottom="20dp">
+
+            <TextView
+                android:id="@+id/step1Indicator"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="1\nFind"
+                android:gravity="center"
+                android:textColor="@color/text_hint"
+                android:textSize="11sp" />
+
+            <TextView
+                android:id="@+id/step2Indicator"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="2\nInit"
+                android:gravity="center"
+                android:textColor="@color/text_hint"
+                android:textSize="11sp" />
+
+            <TextView
+                android:id="@+id/step3Indicator"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="3\nVIN"
+                android:gravity="center"
+                android:textColor="@color/text_hint"
+                android:textSize="11sp" />
+
+            <TextView
+                android:id="@+id/step4Indicator"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="4\nActivate"
+                android:gravity="center"
+                android:textColor="@color/text_hint"
+                android:textSize="11sp" />
+
+            <TextView
+                android:id="@+id/step5Indicator"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="5\nDone"
+                android:gravity="center"
+                android:textColor="@color/text_hint"
+                android:textSize="11sp" />
+
+        </LinearLayout>
+
+        <!-- Status card -->
+        <com.google.android.material.card.MaterialCardView
+            style="@style/Widget.GMC.Card"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="16dp">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:padding="16dp">
+
+                <ProgressBar
+                    android:id="@+id/progress_bar"
+                    android:layout_width="24dp"
+                    android:layout_height="24dp"
+                    android:indeterminate="true"
+                    android:indeterminateTint="@color/gmc_red"
+                    android:visibility="gone"
+                    android:layout_marginBottom="8dp" />
+
+                <TextView
+                    android:id="@+id/status_text"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:textColor="@color/text_primary"
+                    android:textSize="14sp"
+                    android:text="Plug your ELM327 OBD2 adapter into the vehicle's OBD2 port, then tap Scan." />
+
+            </LinearLayout>
+        </com.google.android.material.card.MaterialCardView>
+
+        <!-- Discovered adapter list (dynamically populated) -->
+        <LinearLayout
+            android:id="@+id/adapters_container"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:layout_marginBottom="16dp" />
+
+        <!-- Action buttons -->
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btn_start_scan"
+            style="@style/Widget.GMC.Button"
+            android:layout_width="match_parent"
+            android:layout_height="52dp"
+            android:text="Scan for OBD2 Adapter"
+            android:layout_marginBottom="8dp" />
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btn_proceed_vin_mismatch"
+            style="@style/Widget.GMC.Button.Outlined"
+            android:layout_width="match_parent"
+            android:layout_height="52dp"
+            android:text="Proceed Anyway (VIN mismatch)"
+            android:visibility="gone"
+            android:layout_marginBottom="8dp" />
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btn_run_diagnostic"
+            style="@style/Widget.GMC.Button.Outlined"
+            android:layout_width="match_parent"
+            android:layout_height="52dp"
+            android:text="Diagnostic Dump (research mode)"
+            android:visibility="gone"
+            android:layout_marginBottom="8dp" />
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btn_go_to_pairing"
+            style="@style/Widget.GMC.Button"
+            android:layout_width="match_parent"
+            android:layout_height="52dp"
+            android:text="Scan for Vehicle Now"
+            android:visibility="gone" />
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Requires an ELM327-compatible Bluetooth OBD2 adapter (₪50–100 on Amazon). No internet connection needed."
+            android:textColor="@color/text_hint"
+            android:textSize="11sp"
+            android:gravity="center"
+            android:layout_marginTop="20dp" />
+
+    </LinearLayout>
+</androidx.core.widget.NestedScrollView>

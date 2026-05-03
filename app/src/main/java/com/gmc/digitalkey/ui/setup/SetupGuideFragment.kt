@@ -24,6 +24,9 @@ class SetupGuideFragment : Fragment() {
         binding.btnGoPair.setOnClickListener {
             findNavController().navigate(R.id.vehicleSelectFragment)
         }
+        binding.btnObd2Bypass.setOnClickListener {
+            findNavController().navigate(R.id.action_setup_to_obd2)
+        }
     }
 
     override fun onDestroyView() {

@@ -31,11 +31,33 @@
     <fragment
         android:id="@+id/vehicleSelectFragment"
         android:name="com.gmc.digitalkey.ui.settings.VehicleSelectFragment"
-        android:label="@string/select_model" />
+        android:label="@string/select_model">
+        <action
+            android:id="@+id/action_vehicle_select_to_obd2"
+            app:destination="@id/obd2ActivationFragment" />
+    </fragment>
 
     <fragment
         android:id="@+id/setupGuideFragment"
         android:name="com.gmc.digitalkey.ui.setup.SetupGuideFragment"
-        android:label="Activate Digital Key" />
+        android:label="Activate Digital Key">
+        <action
+            android:id="@+id/action_setup_to_obd2"
+            app:destination="@id/obd2ActivationFragment" />
+    </fragment>
+
+    <fragment
+        android:id="@+id/obd2ActivationFragment"
+        android:name="com.gmc.digitalkey.ui.activation.Obd2ActivationFragment"
+        android:label="OBD2 Activation">
+        <argument
+            android:name="vehicleId"
+            app:argType="string"
+            app:nullable="true"
+            android:defaultValue="@null" />
+        <action
+            android:id="@+id/action_obd2_to_vehicle_select"
+            app:destination="@id/vehicleSelectFragment" />
+    </fragment>
 
 </navigation>

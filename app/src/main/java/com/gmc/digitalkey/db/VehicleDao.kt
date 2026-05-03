@@ -36,6 +36,9 @@ interface VehicleDao {
     @Query("UPDATE vehicles SET imageUrl = :url WHERE id = :id")
     suspend fun updateImageUrl(id: String, url: String)
 
+    @Query("UPDATE vehicles SET activationMethod = :method WHERE id = :id")
+    suspend fun updateActivationMethod(id: String, method: String)
+
     @Delete
     suspend fun delete(vehicle: VehicleEntity)
 

@@ -372,6 +372,15 @@
                     android:padding="12dp"
                     android:visibility="visible" />
 
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btn_obd2_activate"
+                    style="@style/Widget.GMC.Button.Outlined"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="No vehicle found? Try OBD2 activation"
+                    android:textSize="12sp"
+                    android:layout_marginTop="4dp" />
+
             </LinearLayout>
         </com.google.android.material.card.MaterialCardView>
 

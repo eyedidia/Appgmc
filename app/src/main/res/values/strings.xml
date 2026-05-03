@@ -87,6 +87,15 @@
     <string name="battery_opt_title">Allow Background Operation</string>
     <string name="battery_opt_msg">To unlock your vehicle when you approach, myGMC needs to run in the background without battery restrictions.</string>
 
+    <!-- OBD2 Activation -->
+    <string name="obd2_activation_title">OBD2 Activation</string>
+    <string name="obd2_scan_prompt">Scan for OBD2 Adapter</string>
+    <string name="obd2_bypass_button">Advanced: Bypass via OBD2 Port</string>
+    <string name="obd2_no_vehicle_hint">No vehicle found? Try OBD2 activation</string>
+    <string name="obd2_success">BLE digital key activated via OBD2</string>
+    <string name="obd2_security_key_needed">Security key required — diagnostic mode available</string>
+    <string name="obd2_diagnostic_dump">Diagnostic Dump (research mode)</string>
+
     <!-- Dialogs -->
     <string name="ok">OK</string>
     <string name="cancel">Cancel</string>

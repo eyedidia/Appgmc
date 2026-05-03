@@ -77,6 +77,10 @@ class VehicleSelectFragment : Fragment() {
             findNavController().navigate(R.id.setupGuideFragment)
         }
 
+        binding.btnObd2Activate.setOnClickListener {
+            findNavController().navigate(R.id.action_vehicle_select_to_obd2)
+        }
+
         // VIN entry
         binding.vinInput.addTextChangedListener(object : TextWatcher {
             override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) = Unit
