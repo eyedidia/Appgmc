@@ -3,7 +3,6 @@ package com.gmc.digitalkey.model
 data class VehicleState(
     val vehicleId: String,
     val lockState: LockState = LockState.UNKNOWN,
-    val engineState: EngineState = EngineState.OFF,
     val chargingState: ChargingState = ChargingState(),
     val bleRssi: Int = Int.MIN_VALUE,
     val lastUpdated: Long = 0L
@@ -13,5 +12,3 @@ data class VehicleState(
 }
 
 enum class LockState { LOCKED, UNLOCKED, UNKNOWN }
-
-enum class EngineState { OFF, STARTING, RUNNING, STOPPING }

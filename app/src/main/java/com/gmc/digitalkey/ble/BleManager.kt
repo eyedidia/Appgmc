@@ -8,7 +8,6 @@ import android.os.Handler
 import android.os.Looper
 import com.gmc.digitalkey.crypto.ChallengeResponseEngine
 import com.gmc.digitalkey.model.ChargingState
-import com.gmc.digitalkey.model.EngineState
 import com.gmc.digitalkey.model.LockState
 import com.gmc.digitalkey.model.PlugState
 import com.gmc.digitalkey.model.VehicleState
@@ -128,9 +127,6 @@ class BleManager(private val context: Context) {
 
     fun sendLock() = sendCommand(VehicleGattProfile.Commands.LOCK, "LOCK")
     fun sendUnlock() = sendCommand(VehicleGattProfile.Commands.UNLOCK, "UNLOCK")
-    fun sendRemoteStart() = sendCommand(VehicleGattProfile.Commands.REMOTE_START, "REMOTE_START")
-    fun sendRemoteStop() = sendCommand(VehicleGattProfile.Commands.REMOTE_STOP, "REMOTE_STOP")
-    fun sendHornLights() = sendCommand(VehicleGattProfile.Commands.HORN_LIGHTS, "HORN_LIGHTS")
 
     fun sendChargeLimit(limitPercent: Int) {
         val gatt = gatt ?: return
@@ -255,19 +251,14 @@ class BleManager(private val context: Context) {
 
     private fun handleStatusUpdate(bytes: ByteArray) {
         val vehicleId = currentVehicleId ?: return
-        val (lockByte, engineByte) = VehicleGattProfile.parseVehicleStatus(bytes)
+        val lockByte = VehicleGattProfile.parseVehicleStatus(bytes)
         val lock = when (lockByte) {
             VehicleGattProfile.StatusBytes.LOCKED -> LockState.LOCKED
             VehicleGattProfile.StatusBytes.UNLOCKED -> LockState.UNLOCKED
             else -> LockState.UNKNOWN
         }
-        val engine = when (engineByte) {
-            VehicleGattProfile.StatusBytes.ENGINE_STARTING -> EngineState.STARTING
-            VehicleGattProfile.StatusBytes.ENGINE_RUNNING -> EngineState.RUNNING
-            else -> EngineState.OFF
-        }
         _vehicleState.value = (_vehicleState.value ?: VehicleState(vehicleId))
-            .copy(lockState = lock, engineState = engine, lastUpdated = System.currentTimeMillis())
+            .copy(lockState = lock, lastUpdated = System.currentTimeMillis())
     }
 
     private fun handleChargingUpdate(bytes: ByteArray) {

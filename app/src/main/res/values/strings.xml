@@ -11,15 +11,9 @@
     <!-- Home -->
     <string name="action_lock">Lock</string>
     <string name="action_unlock">Unlock</string>
-    <string name="action_remote_start">Start</string>
-    <string name="action_remote_stop">Stop</string>
-    <string name="action_horn_lights">Horn\n&amp; Lights</string>
     <string name="vehicle_locked">Locked</string>
     <string name="vehicle_unlocked">Unlocked</string>
     <string name="vehicle_status_unknown">—</string>
-    <string name="engine_off">Engine Off</string>
-    <string name="engine_starting">Starting…</string>
-    <string name="engine_running">Engine Running</string>
     <string name="no_vehicle_paired">No vehicle paired.\nTap Digital Key to get started.</string>
 
     <!-- BLE Status -->

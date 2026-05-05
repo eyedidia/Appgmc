@@ -28,20 +28,14 @@ object VehicleGattProfile {
     object Commands {
         const val LOCK: Byte = 0x01
         const val UNLOCK: Byte = 0x02
-        const val REMOTE_START: Byte = 0x03
-        const val REMOTE_STOP: Byte = 0x04
         const val CHARGING_STATUS_REQUEST: Byte = 0x10
         const val SET_CHARGE_LIMIT: Byte = 0x11
-        const val HORN_LIGHTS: Byte = 0x05
         const val PAIRING_REQUEST: Byte = 0x20
     }
 
     object StatusBytes {
         const val LOCKED: Byte = 0x01
         const val UNLOCKED: Byte = 0x02
-        const val ENGINE_OFF: Byte = 0x10
-        const val ENGINE_STARTING: Byte = 0x11
-        const val ENGINE_RUNNING: Byte = 0x12
     }
 
     fun buildCommand(cmd: Byte, vararg params: Byte): ByteArray =
@@ -50,10 +44,8 @@ object VehicleGattProfile {
     fun buildChargeLimitCommand(limitPercent: Int): ByteArray =
         byteArrayOf(Commands.SET_CHARGE_LIMIT, limitPercent.coerceIn(20, 100).toByte())
 
-    fun parseVehicleStatus(bytes: ByteArray): Pair<Byte, Byte> {
-        val lockByte = if (bytes.isNotEmpty()) bytes[0] else 0x00
-        val engineByte = if (bytes.size > 1) bytes[1] else 0x00
-        return lockByte to engineByte
+    fun parseVehicleStatus(bytes: ByteArray): Byte {
+        return if (bytes.isNotEmpty()) bytes[0] else 0x00
     }
 
     fun parseChargingData(bytes: ByteArray): Triple<Int, Int, Float> {

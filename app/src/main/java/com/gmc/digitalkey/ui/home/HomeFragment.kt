@@ -16,7 +16,6 @@ import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.gmc.digitalkey.R
 import com.gmc.digitalkey.ble.BleConnectionState
 import com.gmc.digitalkey.databinding.FragmentHomeBinding
-import com.gmc.digitalkey.model.EngineState
 import com.gmc.digitalkey.model.LockState
 import com.gmc.digitalkey.model.PairedVehicle
 import kotlinx.coroutines.launch
@@ -45,8 +44,6 @@ class HomeFragment : Fragment() {
             val anim = AnimationUtils.loadAnimation(requireContext(), R.anim.unlock_flash)
             binding.vehicleImage.startAnimation(anim)
         }
-        binding.btnRemoteStart.setOnClickListener { viewModel.remoteStart() }
-        binding.btnHorn.setOnClickListener { viewModel.hornLights() }
         binding.errorActionBtn.setOnClickListener {
             startActivity(Intent(Settings.ACTION_BLUETOOTH_SETTINGS))
         }
@@ -131,13 +128,6 @@ class HomeFragment : Fragment() {
                     LockState.UNLOCKED -> getString(R.string.vehicle_unlocked)
                     LockState.UNKNOWN -> getString(R.string.vehicle_status_unknown)
                 }
-                // Engine state
-                binding.engineStateText.text = when (state.engineState) {
-                    EngineState.OFF -> getString(R.string.engine_off)
-                    EngineState.STARTING -> getString(R.string.engine_starting)
-                    EngineState.RUNNING -> getString(R.string.engine_running)
-                    EngineState.STOPPING -> getString(R.string.engine_off)
-                }
                 // SOC
                 val soc = state.chargingState.socPercent
                 if (soc >= 0) {
@@ -193,8 +183,6 @@ class HomeFragment : Fragment() {
         val enabled = state.isReady
         binding.btnLock.isEnabled = enabled
         binding.btnUnlock.isEnabled = enabled
-        binding.btnRemoteStart.isEnabled = enabled
-        binding.btnHorn.isEnabled = enabled
     }
 
     override fun onDestroyView() {

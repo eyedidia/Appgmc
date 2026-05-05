@@ -140,13 +140,6 @@
             android:visibility="gone"
             tools:text="87%" />
 
-        <TextView
-            android:id="@+id/engine_state_text"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="@string/engine_off"
-            android:textColor="@color/text_secondary"
-            android:textSize="16sp" />
     </LinearLayout>
 
     <!-- 4 Action Buttons -->
@@ -214,62 +207,6 @@
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:text="@string/action_unlock"
-                android:textColor="@color/text_secondary"
-                android:textSize="12sp"
-                android:layout_marginTop="6dp" />
-        </LinearLayout>
-
-        <!-- Remote Start -->
-        <LinearLayout
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:layout_weight="1"
-            android:orientation="vertical"
-            android:gravity="center">
-            <com.google.android.material.button.MaterialButton
-                android:id="@+id/btn_remote_start"
-                style="@style/Widget.GMC.Button.Circular"
-                android:layout_width="72dp"
-                android:layout_height="72dp"
-                android:insetTop="0dp"
-                android:insetBottom="0dp"
-                app:icon="@drawable/ic_start"
-                app:iconGravity="textStart"
-                app:iconSize="28dp"
-                app:iconPadding="0dp"
-                android:text="" />
-            <TextView
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="@string/action_remote_start"
-                android:textColor="@color/text_secondary"
-                android:textSize="12sp"
-                android:layout_marginTop="6dp" />
-        </LinearLayout>
-
-        <!-- Horn & Lights -->
-        <LinearLayout
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:layout_weight="1"
-            android:orientation="vertical"
-            android:gravity="center">
-            <com.google.android.material.button.MaterialButton
-                android:id="@+id/btn_horn"
-                style="@style/Widget.GMC.Button.Circular"
-                android:layout_width="72dp"
-                android:layout_height="72dp"
-                android:insetTop="0dp"
-                android:insetBottom="0dp"
-                app:icon="@drawable/ic_horn_lights"
-                app:iconGravity="textStart"
-                app:iconSize="28dp"
-                app:iconPadding="0dp"
-                android:text="" />
-            <TextView
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="Horn"
                 android:textColor="@color/text_secondary"
                 android:textSize="12sp"
                 android:layout_marginTop="6dp" />

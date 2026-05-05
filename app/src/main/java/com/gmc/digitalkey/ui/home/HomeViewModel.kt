@@ -78,9 +78,6 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
 
     fun lock() = bleManager.sendLock()
     fun unlock() = bleManager.sendUnlock()
-    fun remoteStart() = bleManager.sendRemoteStart()
-    fun remoteStop() = bleManager.sendRemoteStop()
-    fun hornLights() = bleManager.sendHornLights()
 
     private fun startRssiPolling() {
         rssiHandler.post(object : Runnable {
