@@ -28,9 +28,14 @@ class Obd2Manager(private val context: Context) {
     private var layout: Elm327GattProfile.GattLayout? = null
     private val handler = Handler(Looper.getMainLooper())
     private val commandMutex = Mutex()
+    private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
 
     private var pendingResponse: CompletableDeferred<String>? = null
     private val rxBuffer = StringBuilder()
+
+    // -- Classic Bluetooth (SPP) fields
+    private var classicSocket: BluetoothSocket? = null
+    private var isClassicMode = false
 
     // -- Scanning
 
@@ -102,15 +107,100 @@ class Obd2Manager(private val context: Context) {
         }, 15_000)
     }
 
-    // -- Connection
+    // Scan all BLE devices without filtering — last-resort fallback shown to user
+    fun scanForAllBleAdapters(onFound: (BluetoothDevice) -> Unit, onStopped: () -> Unit = {}) {
+        _state.value = Obd2State.Scanning
+        val scanner = adapter.bluetoothLeScanner
+        val settings = ScanSettings.Builder()
+            .setScanMode(ScanSettings.SCAN_MODE_LOW_LATENCY)
+            .build()
+
+        val found = mutableSetOf<String>()
+        val cb = object : ScanCallback() {
+            override fun onScanResult(callbackType: Int, result: ScanResult) {
+                if (found.add(result.device.address)) onFound(result.device)
+            }
+            override fun onScanFailed(errorCode: Int) {
+                _state.value = Obd2State.Error("Scan failed: $errorCode")
+                onStopped()
+            }
+        }
+
+        scanner.startScan(null, settings, cb)
+        handler.postDelayed({
+            scanner.stopScan(cb)
+            if (_state.value is Obd2State.Scanning) _state.value = Obd2State.Idle
+            onStopped()
+        }, 10_000)
+    }
+
+    // Return Classic BT paired devices (visible immediately, no scan needed)
+    fun getClassicBtDevices(): List<BluetoothDevice> =
+        runCatching { adapter.bondedDevices }.getOrElse { emptySet() }
+            .filter {
+                it.type == BluetoothDevice.DEVICE_TYPE_CLASSIC ||
+                it.type == BluetoothDevice.DEVICE_TYPE_DUAL
+            }
+            .toList()
+
+    // -- BLE Connection
 
     fun connect(device: BluetoothDevice) {
         _state.value = Obd2State.Connecting(device)
+        isClassicMode = false
         gatt?.close()
         gatt = device.connectGatt(context, false, gattCallback, BluetoothDevice.TRANSPORT_LE)
     }
 
+    // -- Classic Bluetooth (SPP) Connection
+
+    fun connectClassic(device: BluetoothDevice) {
+        _state.value = Obd2State.Connecting(device)
+        isClassicMode = true
+        gatt?.close(); gatt = null; layout = null
+        val prevSocket = classicSocket
+        classicSocket = null
+        scope.launch {
+            runCatching { prevSocket?.close() }
+            try {
+                adapter.cancelDiscovery()
+                val socket = device.createRfcommSocketToServiceRecord(Elm327GattProfile.SPP_UUID)
+                classicSocket = socket
+                withContext(Dispatchers.IO) { socket.connect() }
+                launch { classicReadLoop(socket) }
+                _state.value = Obd2State.AdapterFound(device)
+            } catch (e: Exception) {
+                _state.value = Obd2State.Error("BT connect failed: ${e.message}")
+            }
+        }
+    }
+
+    private suspend fun classicReadLoop(socket: BluetoothSocket) {
+        val buf = ByteArray(1024)
+        try {
+            while (true) {
+                val n = withContext(Dispatchers.IO) { socket.inputStream.read(buf) }
+                if (n <= 0) break
+                val chunk = String(buf, 0, n, Charsets.US_ASCII)
+                rxBuffer.append(chunk)
+                if (rxBuffer.contains('>')) {
+                    val response = rxBuffer.toString().substringBefore('>').trim()
+                    rxBuffer.clear()
+                    pendingResponse?.complete(response)
+                    pendingResponse = null
+                }
+            }
+        } catch (e: Exception) {
+            _state.value = Obd2State.Disconnected
+            pendingResponse?.completeExceptionally(e)
+            pendingResponse = null
+        }
+    }
+
     fun disconnect() {
+        scope.launch { runCatching { classicSocket?.close() } }
+        classicSocket = null
+        isClassicMode = false
         gatt?.disconnect()
         gatt?.close()
         gatt = null
@@ -124,6 +214,18 @@ class Obd2Manager(private val context: Context) {
     // -- AT / OBD command (coroutine-safe, serial via Mutex)
 
     suspend fun sendCommand(cmd: String, timeoutMs: Long = 4_000): String = commandMutex.withLock {
+        if (isClassicMode) {
+            val socket = classicSocket ?: error("Not connected to adapter")
+            rxBuffer.clear()
+            val deferred = CompletableDeferred<String>()
+            pendingResponse = deferred
+            withContext(Dispatchers.IO) {
+                socket.outputStream.write((cmd + "\r").toByteArray(Charsets.US_ASCII))
+                socket.outputStream.flush()
+            }
+            return@withLock withTimeout(timeoutMs) { deferred.await() }
+        }
+        // BLE path
         val g = gatt ?: error("Not connected to adapter")
         val l = layout ?: error("GATT layout not discovered")
         val service = g.getService(l.serviceUuid) ?: error("OBD service missing")

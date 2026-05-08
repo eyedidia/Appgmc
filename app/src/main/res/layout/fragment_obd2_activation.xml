@@ -31,7 +31,7 @@
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="Bypass OnStar via the vehicle's OBD2 port. Requires an ELM327 BLE adapter."
+            android:text="Bypass OnStar via the vehicle's OBD2 port. Works with ELM327 BLE adapters and Classic Bluetooth (paired) adapters."
             android:textColor="@color/text_secondary"
             android:textSize="14sp"
             android:layout_marginBottom="20dp" />
@@ -119,6 +119,15 @@
             android:layout_width="match_parent"
             android:layout_height="52dp"
             android:text="Scan for OBD2 Adapter"
+            android:layout_marginBottom="8dp" />
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btn_show_all_ble"
+            style="@style/Widget.GMC.Button.Outlined"
+            android:layout_width="match_parent"
+            android:layout_height="52dp"
+            android:text="Show all nearby Bluetooth devices"
+            android:visibility="gone"
             android:layout_marginBottom="8dp" />
 
         <com.google.android.material.button.MaterialButton
@@ -254,7 +263,7 @@
         <TextView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="Requires an ELM327-compatible Bluetooth OBD2 adapter. Search: 'ELM327 BLE v1.5' on Amazon/AliExpress (~₪60)."
+            android:text="Works with ELM327 BLE (UUID FFF0/FFE0) and Classic Bluetooth adapters already paired in Android Settings. Search: 'ELM327 BLE v1.5' (~₪60)."
             android:textColor="@color/text_hint"
             android:textSize="11sp"
             android:gravity="center"

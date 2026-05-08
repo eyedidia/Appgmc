@@ -13,9 +13,16 @@ object Elm327GattProfile {
     val SERVICE_FFE0: UUID = UUID.fromString("0000FFE0-0000-1000-8000-00805F9B34FB")
     val CHAR_FFE1_RXTX: UUID = UUID.fromString("0000FFE1-0000-1000-8000-00805F9B34FB") // NOTIFY + WRITE
 
+    // Classic Bluetooth SPP (used by non-BLE ELM327 dongles)
+    val SPP_UUID: UUID = UUID.fromString("00001101-0000-1000-8000-00805F9B34FB")
+
     val DESC_CCCD: UUID = UUID.fromString("00002902-0000-1000-8000-00805F9B34FB")
 
-    val ELM_NAME_HINTS = listOf("OBD", "ELM", "OBDII", "OBD2", "VLINK", "KONNWEI", "VEEPEAK")
+    val ELM_NAME_HINTS = listOf(
+        "OBD", "ELM", "OBDII", "OBD2", "VLINK", "KONNWEI", "VEEPEAK",
+        "BAFX", "IOBD", "FIXD", "CARISTA", "CARLY", "BLUEDRIVER",
+        "BIMMER", "LEMUR", "SCAN", "DIAG", "LINK", "BT-"
+    )
 
     data class GattLayout(
         val txChar: UUID,

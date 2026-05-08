@@ -42,6 +42,10 @@ class Obd2ActivationFragment : Fragment() {
         arguments?.getString("vehicleId")?.let { viewModel.loadVehicleVin(it) }
 
         binding.btnStartScan.setOnClickListener { viewModel.startAdapterScan() }
+        binding.btnShowAllBle.setOnClickListener {
+            binding.btnShowAllBle.visibility = View.GONE
+            viewModel.showAllBleDevices()
+        }
         binding.btnRunDiagnostic.setOnClickListener { viewModel.runDiagnosticDump() }
         binding.btnProceedVinMismatch.setOnClickListener {
             binding.btnProceedVinMismatch.visibility = View.GONE
@@ -90,6 +94,7 @@ class Obd2ActivationFragment : Fragment() {
         binding.btnRunDiagnostic.visibility = View.GONE
         binding.btnGoToPairing.visibility = View.GONE
         binding.btnCopyExport.visibility = View.GONE
+        binding.btnShowAllBle.visibility = View.GONE
 
         // Show AT terminal once we're past initialization
         val terminalVisible = state !is Obd2ActivationState.Idle &&
@@ -189,6 +194,9 @@ class Obd2ActivationFragment : Fragment() {
             is Obd2ActivationState.ActivationError -> {
                 binding.statusText.text = "Error: ${state.message}"
                 binding.btnStartScan.isEnabled = state.recoverable
+                if (state.message.startsWith("No OBD2 adapter found")) {
+                    binding.btnShowAllBle.visibility = View.VISIBLE
+                }
             }
             is Obd2ActivationState.AtTerminalResult -> { /* handled by terminal log */ }
         }
@@ -199,6 +207,8 @@ class Obd2ActivationFragment : Fragment() {
         binding.adaptersContainer.removeAllViews()
         adapters.forEach { device ->
             val name = runCatching { device.name }.getOrNull() ?: device.address
+            val isClassic = device.type == android.bluetooth.BluetoothDevice.DEVICE_TYPE_CLASSIC ||
+                device.type == android.bluetooth.BluetoothDevice.DEVICE_TYPE_DUAL
 
             val card = MaterialCardView(requireContext()).apply {
                 layoutParams = LinearLayout.LayoutParams(
@@ -220,7 +230,7 @@ class Obd2ActivationFragment : Fragment() {
                 setTypeface(null, Typeface.BOLD)
             })
             inner.addView(TextView(requireContext()).apply {
-                text = device.address
+                text = if (isClassic) "${device.address}  •  Paired (Classic BT)" else device.address
                 setTextColor(requireContext().getColor(R.color.text_secondary))
                 textSize = 12f
             })

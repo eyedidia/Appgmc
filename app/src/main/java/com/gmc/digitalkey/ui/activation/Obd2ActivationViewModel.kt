@@ -65,6 +65,10 @@ class Obd2ActivationViewModel(app: Application) : AndroidViewModel(app) {
     fun startAdapterScan() {
         _foundAdapters.value = emptyList()
         _uiState.value = Obd2ActivationState.ScanningForAdapter
+
+        // Immediately show Classic BT paired devices — no scan needed for bonded devices
+        obd2Manager.getClassicBtDevices().forEach { addAdapter(it) }
+
         obd2Manager.scanForAdapter(
             onFound = { device -> addAdapter(device) },
             onStopped = {
@@ -78,6 +82,24 @@ class Obd2ActivationViewModel(app: Application) : AndroidViewModel(app) {
         )
     }
 
+    @SuppressLint("MissingPermission")
+    fun showAllBleDevices() {
+        _uiState.value = Obd2ActivationState.ScanningForAdapter
+        obd2Manager.scanForAllBleAdapters(
+            onFound = { device -> addAdapter(device) },
+            onStopped = {
+                if (_foundAdapters.value.isEmpty()) {
+                    _uiState.value = Obd2ActivationState.ActivationError(
+                        "No Bluetooth devices found nearby. Make sure Bluetooth is on.",
+                        recoverable = true
+                    )
+                } else {
+                    _uiState.value = Obd2ActivationState.AdapterList(_foundAdapters.value)
+                }
+            }
+        )
+    }
+
     private fun addAdapter(device: BluetoothDevice) {
         val current = _foundAdapters.value.toMutableList()
         if (current.none { it.address == device.address }) current.add(device)
@@ -85,9 +107,15 @@ class Obd2ActivationViewModel(app: Application) : AndroidViewModel(app) {
         _uiState.value = Obd2ActivationState.AdapterList(current)
     }
 
+    @SuppressLint("MissingPermission")
     fun connectAndActivate(device: BluetoothDevice) {
         _uiState.value = Obd2ActivationState.Connecting(device)
-        obd2Manager.connect(device)
+        if (device.type == BluetoothDevice.DEVICE_TYPE_CLASSIC ||
+            device.type == BluetoothDevice.DEVICE_TYPE_DUAL) {
+            obd2Manager.connectClassic(device)
+        } else {
+            obd2Manager.connect(device)
+        }
         viewModelScope.launch {
             val readyState = obd2Manager.state.filter { it !is Obd2State.Connecting }.first()
             if (readyState is Obd2State.Error || readyState is Obd2State.Disconnected) {
