@@ -164,17 +164,29 @@ class Obd2Manager(private val context: Context) {
             runCatching { prevSocket?.close() }
             try {
                 adapter.cancelDiscovery()
-                // Some ELM327 clones don't register SPP in SDP — try UUID first, fall back to channel 1
-                // createRfcommSocket(int) is a hidden API so we access it via reflection
-                val socket = try {
-                    device.createRfcommSocketToServiceRecord(Elm327GattProfile.SPP_UUID)
-                } catch (e: Exception) {
-                    val m = device.javaClass.getMethod("createRfcommSocket", Int::class.javaPrimitiveType)
-                    m.invoke(device, 1) as BluetoothSocket
-                }
+                // Try 3 methods in order:
+                // 1. Secure RFCOMM via SDP UUID lookup (standard)
+                // 2. Insecure RFCOMM via SDP — cheap clones refuse encrypted channels
+                // 3. Insecure fixed channel 1 via reflection — clones without SDP records
+                val socket = device.createRfcommSocketToServiceRecord(Elm327GattProfile.SPP_UUID)
                 classicSocket = socket
-                withContext(Dispatchers.IO) { socket.connect() }
-                launch { classicReadLoop(socket) }
+                withContext(Dispatchers.IO) {
+                    try {
+                        socket.connect()
+                    } catch (secureEx: Exception) {
+                        runCatching { socket.close() }
+                        val insecureSocket = try {
+                            device.createInsecureRfcommSocketToServiceRecord(Elm327GattProfile.SPP_UUID)
+                        } catch (e: Exception) {
+                            val m = device.javaClass.getMethod("createInsecureRfcommSocket", Int::class.javaPrimitiveType)
+                            m.invoke(device, 1) as BluetoothSocket
+                        }
+                        classicSocket = insecureSocket
+                        insecureSocket.connect()
+                    }
+                }
+                val connectedSocket = classicSocket ?: error("Socket lost after connect")
+                launch { classicReadLoop(connectedSocket) }
                 _state.value = Obd2State.AdapterFound(device)
             } catch (e: Exception) {
                 _state.value = Obd2State.Error("BT connect failed: ${e.message}\n\nEnsure vehicle ignition is ON (accessories mode) so the OBD2 adapter has power.")
