@@ -111,6 +111,13 @@ class VehicleSelectFragment : Fragment() {
                 binding.modelHummerSuv.id    -> GmcEvModel.HUMMER_EV_SUV
                 binding.modelSierraEv.id     -> GmcEvModel.SIERRA_EV_DENALI
                 binding.modelTerrainEv.id    -> GmcEvModel.TERRAIN_EV
+                binding.modelSilveradoEv.id  -> GmcEvModel.SILVERADO_EV
+                binding.modelBlazerEv.id     -> GmcEvModel.BLAZER_EV
+                binding.modelEquinoxEv.id    -> GmcEvModel.EQUINOX_EV
+                binding.modelLyriq.id        -> GmcEvModel.LYRIQ
+                binding.modelOptiq.id        -> GmcEvModel.OPTIQ
+                binding.modelVistiq.id       -> GmcEvModel.VISTIQ
+                binding.modelEscaladeIq.id   -> GmcEvModel.ESCALADE_IQ
                 else                         -> GmcEvModel.HUMMER_EV_PICKUP
             }
             viewModel.pairDevice(device, model, model.displayName, enteredVin,
@@ -214,9 +221,16 @@ class VehicleSelectFragment : Fragment() {
         // Auto-select the matching model radio button
         val modelRadioId = when {
             info.model.contains("HUMMER") && info.bodyClass.contains("pickup", ignoreCase = true) -> binding.modelHummerPickup.id
-            info.model.contains("HUMMER") -> binding.modelHummerSuv.id
-            info.model.contains("SIERRA") -> binding.modelSierraEv.id
-            info.model.contains("TERRAIN") -> binding.modelTerrainEv.id
+            info.model.contains("HUMMER")    -> binding.modelHummerSuv.id
+            info.model.contains("SIERRA")    -> binding.modelSierraEv.id
+            info.model.contains("TERRAIN")   -> binding.modelTerrainEv.id
+            info.model.contains("SILVERADO") -> binding.modelSilveradoEv.id
+            info.model.contains("BLAZER")    -> binding.modelBlazerEv.id
+            info.model.contains("EQUINOX")   -> binding.modelEquinoxEv.id
+            info.model.contains("LYRIQ")     -> binding.modelLyriq.id
+            info.model.contains("OPTIQ")     -> binding.modelOptiq.id
+            info.model.contains("VISTIQ")    -> binding.modelVistiq.id
+            info.model.contains("ESCALADE")  -> binding.modelEscaladeIq.id
             else -> null
         }
         if (modelRadioId != null) binding.modelGroup.check(modelRadioId)

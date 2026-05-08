@@ -411,6 +411,12 @@
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content">
 
+                    <!-- GMC -->
+                    <TextView android:layout_width="match_parent" android:layout_height="wrap_content"
+                        android:text="GMC" android:textColor="@color/text_hint"
+                        android:textSize="10sp" android:letterSpacing="0.12"
+                        android:paddingStart="8dp" android:paddingTop="4dp" android:paddingBottom="2dp" />
+
                     <RadioButton android:id="@+id/model_hummer_pickup"
                         android:layout_width="match_parent" android:layout_height="52dp"
                         android:text="@string/model_hummer_ev_pickup"
@@ -432,6 +438,60 @@
                     <RadioButton android:id="@+id/model_terrain_ev"
                         android:layout_width="match_parent" android:layout_height="52dp"
                         android:text="@string/model_terrain_ev"
+                        android:textColor="@color/text_primary" android:textSize="15sp"
+                        android:buttonTint="@color/gmc_red" android:paddingStart="8dp" />
+
+                    <!-- Chevrolet -->
+                    <TextView android:layout_width="match_parent" android:layout_height="wrap_content"
+                        android:text="CHEVROLET" android:textColor="@color/text_hint"
+                        android:textSize="10sp" android:letterSpacing="0.12"
+                        android:paddingStart="8dp" android:paddingTop="8dp" android:paddingBottom="2dp" />
+
+                    <RadioButton android:id="@+id/model_silverado_ev"
+                        android:layout_width="match_parent" android:layout_height="52dp"
+                        android:text="@string/model_silverado_ev"
+                        android:textColor="@color/text_primary" android:textSize="15sp"
+                        android:buttonTint="@color/gmc_red" android:paddingStart="8dp" />
+
+                    <RadioButton android:id="@+id/model_blazer_ev"
+                        android:layout_width="match_parent" android:layout_height="52dp"
+                        android:text="@string/model_blazer_ev"
+                        android:textColor="@color/text_primary" android:textSize="15sp"
+                        android:buttonTint="@color/gmc_red" android:paddingStart="8dp" />
+
+                    <RadioButton android:id="@+id/model_equinox_ev"
+                        android:layout_width="match_parent" android:layout_height="52dp"
+                        android:text="@string/model_equinox_ev"
+                        android:textColor="@color/text_primary" android:textSize="15sp"
+                        android:buttonTint="@color/gmc_red" android:paddingStart="8dp" />
+
+                    <!-- Cadillac -->
+                    <TextView android:layout_width="match_parent" android:layout_height="wrap_content"
+                        android:text="CADILLAC" android:textColor="@color/text_hint"
+                        android:textSize="10sp" android:letterSpacing="0.12"
+                        android:paddingStart="8dp" android:paddingTop="8dp" android:paddingBottom="2dp" />
+
+                    <RadioButton android:id="@+id/model_lyriq"
+                        android:layout_width="match_parent" android:layout_height="52dp"
+                        android:text="@string/model_lyriq"
+                        android:textColor="@color/text_primary" android:textSize="15sp"
+                        android:buttonTint="@color/gmc_red" android:paddingStart="8dp" />
+
+                    <RadioButton android:id="@+id/model_optiq"
+                        android:layout_width="match_parent" android:layout_height="52dp"
+                        android:text="@string/model_optiq"
+                        android:textColor="@color/text_primary" android:textSize="15sp"
+                        android:buttonTint="@color/gmc_red" android:paddingStart="8dp" />
+
+                    <RadioButton android:id="@+id/model_vistiq"
+                        android:layout_width="match_parent" android:layout_height="52dp"
+                        android:text="@string/model_vistiq"
+                        android:textColor="@color/text_primary" android:textSize="15sp"
+                        android:buttonTint="@color/gmc_red" android:paddingStart="8dp" />
+
+                    <RadioButton android:id="@+id/model_escalade_iq"
+                        android:layout_width="match_parent" android:layout_height="52dp"
+                        android:text="@string/model_escalade_iq"
                         android:textColor="@color/text_primary" android:textSize="15sp"
                         android:buttonTint="@color/gmc_red" android:paddingStart="8dp" />
 

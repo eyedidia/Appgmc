@@ -23,12 +23,19 @@ object VinDecoder {
     // Wikipedia REST summary — returns thumbnail.source for main article image
     private const val WIKI = "https://en.wikipedia.org/api/rest_v1/page/summary/%s"
 
-    // Known GMC EV Wikipedia slugs
+    // Wikipedia slugs for all supported GM EV models
     private val wikiSlug = mapOf(
         "HUMMER EV PICKUP" to "GMC_Hummer_EV",
         "HUMMER EV SUV"    to "GMC_Hummer_EV_SUV",
         "SIERRA EV"        to "GMC_Sierra_EV",
-        "TERRAIN EV"       to "GMC_Terrain_(fourth_generation)"
+        "TERRAIN EV"       to "GMC_Terrain_(fourth_generation)",
+        "SILVERADO EV"     to "Chevrolet_Silverado_EV",
+        "BLAZER EV"        to "Chevrolet_Blazer_EV",
+        "EQUINOX EV"       to "Chevrolet_Equinox_EV_(2024)",
+        "LYRIQ"            to "Cadillac_Lyriq",
+        "OPTIQ"            to "Cadillac_Optiq",
+        "VISTIQ"           to "Cadillac_Vistiq",
+        "ESCALADE IQ"      to "Cadillac_Escalade_IQ"
     )
 
     suspend fun decode(vin: String): VinInfo? = withContext(Dispatchers.IO) {
@@ -52,19 +59,18 @@ object VinDecoder {
     }
 
     private fun resolveWikiSlug(make: String, model: String, bodyClass: String): String? {
-        if (make != "GMC") return null
-        // Try exact keys first
         wikiSlug.forEach { (key, slug) ->
-            if (model.contains(key.substringBefore(" EV"), ignoreCase = true) &&
+            val baseKey = key.substringBefore(" EV").substringBefore(" IQ")
+            if (model.contains(baseKey, ignoreCase = true) &&
                 (key.contains("PICKUP") && bodyClass.contains("pickup", ignoreCase = true) ||
                  key.contains("SUV")    && bodyClass.contains("utility", ignoreCase = true) ||
                  (!key.contains("PICKUP") && !key.contains("SUV")))) {
                 return slug
             }
         }
-        // Fallback: best-effort match
         return wikiSlug.entries.firstOrNull { (k, _) ->
-            model.contains(k.substringBefore(" EV"), ignoreCase = true)
+            val baseKey = k.substringBefore(" EV").substringBefore(" IQ")
+            model.contains(baseKey, ignoreCase = true)
         }?.value
     }
 

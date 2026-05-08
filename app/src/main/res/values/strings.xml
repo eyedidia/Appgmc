@@ -67,11 +67,20 @@
     <string name="nfc_mode_hce">Phone as Key Card (HCE)</string>
     <string name="nfc_mode_tag">Read Door Tag</string>
 
-    <!-- Models -->
+    <!-- Models — GMC -->
     <string name="model_hummer_ev_pickup">Hummer EV Pickup</string>
     <string name="model_hummer_ev_suv">Hummer EV SUV</string>
     <string name="model_sierra_ev">Sierra EV Denali</string>
     <string name="model_terrain_ev">Terrain EV</string>
+    <!-- Models — Chevrolet -->
+    <string name="model_silverado_ev">Silverado EV</string>
+    <string name="model_blazer_ev">Blazer EV</string>
+    <string name="model_equinox_ev">Equinox EV</string>
+    <!-- Models — Cadillac -->
+    <string name="model_lyriq">Cadillac LYRIQ</string>
+    <string name="model_optiq">Cadillac OPTIQ</string>
+    <string name="model_vistiq">Cadillac VISTIQ</string>
+    <string name="model_escalade_iq">Cadillac ESCALADE IQ</string>
 
     <!-- NFC HCE service descriptions -->
     <string name="hce_service_description">GMC Digital Key</string>
