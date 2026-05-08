@@ -165,10 +165,12 @@ class Obd2Manager(private val context: Context) {
             try {
                 adapter.cancelDiscovery()
                 // Some ELM327 clones don't register SPP in SDP — try UUID first, fall back to channel 1
+                // createRfcommSocket(int) is a hidden API so we access it via reflection
                 val socket = try {
                     device.createRfcommSocketToServiceRecord(Elm327GattProfile.SPP_UUID)
                 } catch (e: Exception) {
-                    device.createRfcommSocket(1)
+                    val m = device.javaClass.getMethod("createRfcommSocket", Int::class.javaPrimitiveType)
+                    m.invoke(device, 1) as BluetoothSocket
                 }
                 classicSocket = socket
                 withContext(Dispatchers.IO) { socket.connect() }
