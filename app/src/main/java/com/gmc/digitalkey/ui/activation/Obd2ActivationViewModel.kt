@@ -118,8 +118,14 @@ class Obd2ActivationViewModel(app: Application) : AndroidViewModel(app) {
         }
         viewModelScope.launch {
             val readyState = obd2Manager.state.filter { it !is Obd2State.Connecting }.first()
-            if (readyState is Obd2State.Error || readyState is Obd2State.Disconnected) {
-                _uiState.value = Obd2ActivationState.ActivationError("Failed to connect to OBD2 adapter.")
+            if (readyState is Obd2State.Error) {
+                _uiState.value = Obd2ActivationState.ActivationError(readyState.message)
+                return@launch
+            }
+            if (readyState is Obd2State.Disconnected) {
+                _uiState.value = Obd2ActivationState.ActivationError(
+                    "Adapter disconnected unexpectedly.\nEnsure vehicle ignition is ON so the adapter has power."
+                )
                 return@launch
             }
             runActivationSequence()

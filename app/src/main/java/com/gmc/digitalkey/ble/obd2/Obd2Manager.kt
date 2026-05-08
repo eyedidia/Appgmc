@@ -164,13 +164,18 @@ class Obd2Manager(private val context: Context) {
             runCatching { prevSocket?.close() }
             try {
                 adapter.cancelDiscovery()
-                val socket = device.createRfcommSocketToServiceRecord(Elm327GattProfile.SPP_UUID)
+                // Some ELM327 clones don't register SPP in SDP — try UUID first, fall back to channel 1
+                val socket = try {
+                    device.createRfcommSocketToServiceRecord(Elm327GattProfile.SPP_UUID)
+                } catch (e: Exception) {
+                    device.createRfcommSocket(1)
+                }
                 classicSocket = socket
                 withContext(Dispatchers.IO) { socket.connect() }
                 launch { classicReadLoop(socket) }
                 _state.value = Obd2State.AdapterFound(device)
             } catch (e: Exception) {
-                _state.value = Obd2State.Error("BT connect failed: ${e.message}")
+                _state.value = Obd2State.Error("BT connect failed: ${e.message}\n\nEnsure vehicle ignition is ON (accessories mode) so the OBD2 adapter has power.")
             }
         }
     }
