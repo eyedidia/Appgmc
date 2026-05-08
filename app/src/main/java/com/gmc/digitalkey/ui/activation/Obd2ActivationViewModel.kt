@@ -239,11 +239,23 @@ class Obd2ActivationViewModel(app: Application) : AndroidViewModel(app) {
                 sb.appendLine("VCIM: 0x${state.vcimAddress.toString(16).uppercase()}")
                 sb.appendLine("SecurityAccess seed: ${state.seed.joinToString(" ") { "%02X".format(it) }}")
             }
+            is Obd2ActivationState.ActivationError -> {
+                sb.appendLine("Error: ${state.message}")
+            }
             else -> {}
         }
 
+        val autoLog = obd2Manager.commandLog
+        if (autoLog.isNotEmpty()) {
+            sb.appendLine("--- Auto AT Log ---")
+            autoLog.forEach { (cmd, resp) ->
+                sb.appendLine("> $cmd")
+                sb.appendLine(resp.ifEmpty { "(no response)" })
+            }
+        }
+
         if (_terminalLog.value.isNotEmpty()) {
-            sb.appendLine("--- AT Terminal Log ---")
+            sb.appendLine("--- Manual Terminal Log ---")
             _terminalLog.value.forEach { (cmd, resp) ->
                 sb.appendLine("> $cmd")
                 sb.appendLine(resp)

@@ -197,6 +197,11 @@ class Obd2ActivationFragment : Fragment() {
                 if (state.message.startsWith("No OBD2 adapter found")) {
                     binding.btnShowAllBle.visibility = View.VISIBLE
                 }
+                if (viewModel.obd2Manager.commandLog.isNotEmpty()) {
+                    binding.btnCopyExport.text = "Copy Diagnostic Log"
+                    binding.btnCopyExport.visibility = View.VISIBLE
+                    lastExportableState = state
+                }
             }
             is Obd2ActivationState.AtTerminalResult -> { /* handled by terminal log */ }
         }

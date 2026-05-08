@@ -37,6 +37,11 @@ class Obd2Manager(private val context: Context) {
     private var classicSocket: BluetoothSocket? = null
     private var isClassicMode = false
 
+    // -- Auto command log (records every sendCommand call for diagnostics)
+    private val _commandLog = mutableListOf<Pair<String, String>>()
+    val commandLog: List<Pair<String, String>> get() = synchronized(_commandLog) { _commandLog.toList() }
+    fun clearCommandLog() = synchronized(_commandLog) { _commandLog.clear() }
+
     // -- Scanning
 
     fun scanForAdapter(onFound: (BluetoothDevice) -> Unit, onStopped: () -> Unit = {}) {
@@ -233,6 +238,7 @@ class Obd2Manager(private val context: Context) {
     // -- AT / OBD command (coroutine-safe, serial via Mutex)
 
     suspend fun sendCommand(cmd: String, timeoutMs: Long = 4_000): String = commandMutex.withLock {
+        val response: String
         if (isClassicMode) {
             val socket = classicSocket ?: error("Not connected to adapter")
             rxBuffer.clear()
@@ -242,29 +248,33 @@ class Obd2Manager(private val context: Context) {
                 socket.outputStream.write((cmd + "\r").toByteArray(Charsets.US_ASCII))
                 socket.outputStream.flush()
             }
-            return@withLock withTimeout(timeoutMs) { deferred.await() }
+            response = withTimeout(timeoutMs) { deferred.await() }
+        } else {
+            // BLE path
+            val g = gatt ?: error("Not connected to adapter")
+            val l = layout ?: error("GATT layout not discovered")
+            val service = g.getService(l.serviceUuid) ?: error("OBD service missing")
+            val txChar = service.getCharacteristic(l.txChar) ?: error("TX char missing")
+
+            rxBuffer.clear()
+            val deferred = CompletableDeferred<String>()
+            pendingResponse = deferred
+
+            txChar.writeType = BluetoothGattCharacteristic.WRITE_TYPE_NO_RESPONSE
+            txChar.value = (cmd + "\r").toByteArray(Charsets.US_ASCII)
+            g.writeCharacteristic(txChar)
+
+            response = withTimeout(timeoutMs) { deferred.await() }
         }
-        // BLE path
-        val g = gatt ?: error("Not connected to adapter")
-        val l = layout ?: error("GATT layout not discovered")
-        val service = g.getService(l.serviceUuid) ?: error("OBD service missing")
-        val txChar = service.getCharacteristic(l.txChar) ?: error("TX char missing")
-
-        rxBuffer.clear()
-        val deferred = CompletableDeferred<String>()
-        pendingResponse = deferred
-
-        txChar.writeType = BluetoothGattCharacteristic.WRITE_TYPE_NO_RESPONSE
-        txChar.value = (cmd + "\r").toByteArray(Charsets.US_ASCII)
-        g.writeCharacteristic(txChar)
-
-        withTimeout(timeoutMs) { deferred.await() }
+        synchronized(_commandLog) { _commandLog.add(cmd to response) }
+        response
     }
 
     // -- High-level init sequence
 
     suspend fun initialize(): Boolean {
         _state.value = Obd2State.Initializing
+        clearCommandLog()
         return try {
             sendCommand("ATZ", 3_000)
             delay(400)
@@ -273,6 +283,7 @@ class Obd2Manager(private val context: Context) {
             sendCommand("ATH1")   // headers on
             sendCommand("ATSP0")  // auto protocol
             sendCommand("ATAT1")  // adaptive timing
+            sendCommand("ATDP")   // log detected protocol for diagnostics
             _state.value = Obd2State.Ready
             true
         } catch (e: Exception) {
