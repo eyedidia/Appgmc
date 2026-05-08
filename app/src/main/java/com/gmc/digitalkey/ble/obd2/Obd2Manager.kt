@@ -238,36 +238,37 @@ class Obd2Manager(private val context: Context) {
     // -- AT / OBD command (coroutine-safe, serial via Mutex)
 
     suspend fun sendCommand(cmd: String, timeoutMs: Long = 4_000): String = commandMutex.withLock {
-        val response: String
-        if (isClassicMode) {
-            val socket = classicSocket ?: error("Not connected to adapter")
-            rxBuffer.clear()
-            val deferred = CompletableDeferred<String>()
-            pendingResponse = deferred
-            withContext(Dispatchers.IO) {
-                socket.outputStream.write((cmd + "\r").toByteArray(Charsets.US_ASCII))
-                socket.outputStream.flush()
+        try {
+            val response: String
+            if (isClassicMode) {
+                val socket = classicSocket ?: error("Not connected to adapter")
+                rxBuffer.clear()
+                val deferred = CompletableDeferred<String>()
+                pendingResponse = deferred
+                withContext(Dispatchers.IO) {
+                    socket.outputStream.write((cmd + "\r").toByteArray(Charsets.US_ASCII))
+                    socket.outputStream.flush()
+                }
+                response = withTimeout(timeoutMs) { deferred.await() }
+            } else {
+                val g = gatt ?: error("Not connected to adapter")
+                val l = layout ?: error("GATT layout not discovered")
+                val service = g.getService(l.serviceUuid) ?: error("OBD service missing")
+                val txChar = service.getCharacteristic(l.txChar) ?: error("TX char missing")
+                rxBuffer.clear()
+                val deferred = CompletableDeferred<String>()
+                pendingResponse = deferred
+                txChar.writeType = BluetoothGattCharacteristic.WRITE_TYPE_NO_RESPONSE
+                txChar.value = (cmd + "\r").toByteArray(Charsets.US_ASCII)
+                g.writeCharacteristic(txChar)
+                response = withTimeout(timeoutMs) { deferred.await() }
             }
-            response = withTimeout(timeoutMs) { deferred.await() }
-        } else {
-            // BLE path
-            val g = gatt ?: error("Not connected to adapter")
-            val l = layout ?: error("GATT layout not discovered")
-            val service = g.getService(l.serviceUuid) ?: error("OBD service missing")
-            val txChar = service.getCharacteristic(l.txChar) ?: error("TX char missing")
-
-            rxBuffer.clear()
-            val deferred = CompletableDeferred<String>()
-            pendingResponse = deferred
-
-            txChar.writeType = BluetoothGattCharacteristic.WRITE_TYPE_NO_RESPONSE
-            txChar.value = (cmd + "\r").toByteArray(Charsets.US_ASCII)
-            g.writeCharacteristic(txChar)
-
-            response = withTimeout(timeoutMs) { deferred.await() }
+            synchronized(_commandLog) { _commandLog.add(cmd to response) }
+            response
+        } catch (e: Exception) {
+            synchronized(_commandLog) { _commandLog.add(cmd to "ERROR: ${e.message}") }
+            throw e
         }
-        synchronized(_commandLog) { _commandLog.add(cmd to response) }
-        response
     }
 
     // -- High-level init sequence
@@ -276,14 +277,14 @@ class Obd2Manager(private val context: Context) {
         _state.value = Obd2State.Initializing
         clearCommandLog()
         return try {
-            sendCommand("ATZ", 3_000)
-            delay(400)
-            sendCommand("ATE0")   // echo off
-            sendCommand("ATL0")   // linefeed off
-            sendCommand("ATH1")   // headers on
-            sendCommand("ATSP0")  // auto protocol
-            sendCommand("ATAT1")  // adaptive timing
-            sendCommand("ATDP")   // log detected protocol for diagnostics
+            sendCommand("ATZ", 5_000)   // cold reset — longer timeout
+            delay(1_200)                // ELM327 needs time to finish reset
+            sendCommand("ATE0"); delay(100)
+            sendCommand("ATL0"); delay(100)
+            sendCommand("ATH1"); delay(100)
+            sendCommand("ATSP0"); delay(100)
+            sendCommand("ATAT1"); delay(100)
+            sendCommand("ATDP")         // log detected protocol
             _state.value = Obd2State.Ready
             true
         } catch (e: Exception) {
