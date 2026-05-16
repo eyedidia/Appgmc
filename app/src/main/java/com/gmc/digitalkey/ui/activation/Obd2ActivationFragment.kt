@@ -13,6 +13,7 @@ import android.view.ViewGroup
 import android.widget.LinearLayout
 import android.widget.TextView
 import android.widget.Toast
+import com.gmc.digitalkey.ble.obd2.GmVcimActivation
 import androidx.fragment.app.Fragment
 import androidx.fragment.app.viewModels
 import androidx.lifecycle.lifecycleScope
@@ -79,6 +80,9 @@ class Obd2ActivationFragment : Fragment() {
         viewLifecycleOwner.lifecycleScope.launch {
             viewModel.terminalLog.collect { renderTerminalLog(it) }
         }
+        viewLifecycleOwner.lifecycleScope.launch {
+            viewModel.stepLog.collect { renderStepLog(it) }
+        }
     }
 
     private fun renderState(state: Obd2ActivationState) {
@@ -134,7 +138,7 @@ class Obd2ActivationFragment : Fragment() {
                 binding.btnStartScan.isEnabled = false
             }
             is Obd2ActivationState.DiscoveringEcus -> {
-                binding.statusText.text = "Scanning CAN bus for VCIM module (0x7E0–0x7E7)…"
+                binding.statusText.text = "Scanning CAN bus for VCIM module (Ultium: 0x252, legacy: 0x7E0–0x7E7)…"
                 binding.progressBar.visibility = View.VISIBLE
                 binding.btnStartScan.isEnabled = false
             }
@@ -266,6 +270,52 @@ class Obd2ActivationFragment : Fragment() {
                 typeface = android.graphics.Typeface.MONOSPACE
                 setPadding(0, 0, 0, 8.dpToPx())
             })
+        }
+    }
+
+    private fun renderStepLog(steps: List<GmVcimActivation.StepResult>) {
+        if (steps.isEmpty()) {
+            binding.stepLogCard.visibility = View.GONE
+            return
+        }
+        binding.stepLogCard.visibility = View.VISIBLE
+        binding.stepLogContainer.removeAllViews()
+        steps.forEach { step ->
+            val row = LinearLayout(requireContext()).apply {
+                orientation = LinearLayout.HORIZONTAL
+                layoutParams = LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.MATCH_PARENT,
+                    LinearLayout.LayoutParams.WRAP_CONTENT
+                ).also { it.bottomMargin = 4.dpToPx() }
+            }
+            row.addView(TextView(requireContext()).apply {
+                text = if (step.ok) "✓" else "✗"
+                setTextColor(requireContext().getColor(
+                    if (step.ok) R.color.status_connected else R.color.status_error))
+                textSize = 12f
+                typeface = android.graphics.Typeface.MONOSPACE
+                layoutParams = LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.WRAP_CONTENT,
+                    LinearLayout.LayoutParams.WRAP_CONTENT
+                ).also { it.marginEnd = 6.dpToPx() }
+            })
+            row.addView(LinearLayout(requireContext()).apply {
+                orientation = LinearLayout.VERTICAL
+                layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
+                addView(TextView(requireContext()).apply {
+                    text = step.name
+                    setTextColor(requireContext().getColor(R.color.text_primary))
+                    textSize = 12f
+                    typeface = android.graphics.Typeface.MONOSPACE
+                })
+                if (step.detail.isNotEmpty()) addView(TextView(requireContext()).apply {
+                    text = step.detail
+                    setTextColor(requireContext().getColor(R.color.text_secondary))
+                    textSize = 11f
+                    typeface = android.graphics.Typeface.MONOSPACE
+                })
+            })
+            binding.stepLogContainer.addView(row)
         }
     }
 
