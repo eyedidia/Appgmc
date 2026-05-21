@@ -299,14 +299,13 @@ class Obd2Manager(private val context: Context) {
     private suspend fun detect29BitCan(): Boolean {
         return try {
             sendCommand("ATSP7"); delay(200)
-            sendCommand("ATSH 18DB33F1"); delay(100)
-            val r = sendCommand("10 01", 3_000)  // UDS default session — fast response
+            set29BitHeader("18DB33F1")
+            val r = sendCommand("10 01", 3_000)
             val got29bit = r.isNotBlank()
                 && !r.contains("NO DATA", ignoreCase = true)
                 && !r.contains("SEARCHING", ignoreCase = true)
                 && !r.contains("ERROR", ignoreCase = true)
             if (!got29bit) {
-                // 29-bit didn't work — revert to auto
                 sendCommand("ATSP0"); delay(200)
                 sendCommand("ATSH 7DF"); delay(100)
             }
@@ -317,13 +316,27 @@ class Obd2Manager(private val context: Context) {
         }
     }
 
+    // ELM327 clones reject ATSH with 8 hex chars (4 bytes).
+    // For 29-bit CAN: ATCP {priority_byte} + ATSH {3_bytes} instead of ATSH {4_bytes}.
+    private suspend fun set29BitHeader(addr8Hex: String) {
+        if (addr8Hex.length == 8) {
+            val priority = addr8Hex.substring(0, 2)
+            val header3  = addr8Hex.substring(2)
+            try { sendCommand("ATCP $priority", 2_000) } catch (_: Exception) {}
+            sendCommand("ATSH $header3", 2_000)
+        } else {
+            sendCommand("ATSH $addr8Hex", 2_000)
+        }
+        delay(50)
+    }
+
     // -- VIN reading (Mode 09 PID 02)
 
     suspend fun readVin(): String? = try {
         if (use29BitCan) {
             // In 29-bit mode, use ATH0 for VIN so header bytes don't pollute parsing
             sendCommand("ATH0")
-            sendCommand("ATSH 18DB33F1")
+            set29BitHeader("18DB33F1")
         } else {
             sendCommand("ATSH 7DF")
         }
@@ -356,7 +369,7 @@ class Obd2Manager(private val context: Context) {
         if (use29BitCan) {
             // 29-bit physical: tester → ECU: 18DA{ecu}F1, ECU → tester: 18DAF1{ecu}
             sendCommand("ATH0")  // no headers in response — avoids parsing ambiguity
-            sendCommand("ATSH 18DA%02XF1".format(ecuAddress and 0xFF))
+            set29BitHeader("18DA%02XF1".format(ecuAddress and 0xFF))
         } else {
             sendCommand("ATSH %03X".format(ecuAddress))
         }
@@ -369,8 +382,8 @@ class Obd2Manager(private val context: Context) {
     suspend fun discoverEcuIds29Bit(): List<Int> {
         val ids = mutableListOf<Int>()
         try {
-            sendCommand("ATH1")          // headers on — need them to see ECU addresses
-            sendCommand("ATSH 18DB33F1") // functional broadcast (all ECUs)
+            sendCommand("ATH1")        // headers on — need them to see ECU addresses
+            set29BitHeader("18DB33F1") // functional broadcast (all ECUs)
             val resp = sendCommand("10 01", 5_000)
 
             // ELM327 may format 29-bit headers as "18 DA F1 11" (spaced) or "18DAF111" (compact)
