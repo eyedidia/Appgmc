@@ -153,6 +153,13 @@ class Obd2ActivationViewModel(app: Application) : AndroidViewModel(app) {
             )
             return
         }
+        // Log which CAN protocol was detected
+        activeStepLog += GmVcimActivation.StepResult(
+            "Protocol detection",
+            true,
+            if (obd2Manager.use29BitCan) "ISO 15765-4 CAN 29-bit / 500kbaud (ATSP7)"
+            else "ISO 15765-4 CAN 11-bit / auto (ATSP0)"
+        )
         emitStepLog()
 
         _uiState.value = Obd2ActivationState.ReadingVin

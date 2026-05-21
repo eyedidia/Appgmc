@@ -33,11 +33,15 @@ class Obd2Manager(private val context: Context) {
     private var pendingResponse: CompletableDeferred<String>? = null
     private val rxBuffer = StringBuilder()
 
-    // -- Classic Bluetooth (SPP) fields
+    // Classic Bluetooth (SPP) fields
     private var classicSocket: BluetoothSocket? = null
     private var isClassicMode = false
 
-    // -- Auto command log (records every sendCommand call for diagnostics)
+    // True when vehicle uses ISO 15765-4 CAN 29-bit (ATSP7) — e.g. Silverado EV 2025
+    var use29BitCan = false
+        private set
+
+    // Auto command log
     private val _commandLog = mutableListOf<Pair<String, String>>()
     val commandLog: List<Pair<String, String>> get() = synchronized(_commandLog) { _commandLog.toList() }
     fun clearCommandLog() = synchronized(_commandLog) { _commandLog.clear() }
@@ -72,7 +76,6 @@ class Obd2Manager(private val context: Context) {
         handler.postDelayed({
             scanner.stopScan(cb)
             if (_state.value is Obd2State.Scanning) {
-                // Fallback: unfiltered scan by device name
                 scanForAdapterByName(onFound, onStopped)
             }
         }, 15_000)
@@ -112,7 +115,6 @@ class Obd2Manager(private val context: Context) {
         }, 15_000)
     }
 
-    // Scan all BLE devices without filtering — last-resort fallback shown to user
     fun scanForAllBleAdapters(onFound: (BluetoothDevice) -> Unit, onStopped: () -> Unit = {}) {
         _state.value = Obd2State.Scanning
         val scanner = adapter.bluetoothLeScanner
@@ -139,7 +141,6 @@ class Obd2Manager(private val context: Context) {
         }, 10_000)
     }
 
-    // Return Classic BT paired devices (visible immediately, no scan needed)
     fun getClassicBtDevices(): List<BluetoothDevice> =
         runCatching { adapter.bondedDevices }.getOrElse { emptySet() }
             .filter {
@@ -169,10 +170,6 @@ class Obd2Manager(private val context: Context) {
             runCatching { prevSocket?.close() }
             try {
                 adapter.cancelDiscovery()
-                // Try 3 methods in order:
-                // 1. Secure RFCOMM via SDP UUID lookup (standard)
-                // 2. Insecure RFCOMM via SDP — cheap clones refuse encrypted channels
-                // 3. Insecure fixed channel 1 via reflection — clones without SDP records
                 val socket = device.createRfcommSocketToServiceRecord(Elm327GattProfile.SPP_UUID)
                 classicSocket = socket
                 withContext(Dispatchers.IO) {
@@ -232,6 +229,7 @@ class Obd2Manager(private val context: Context) {
         pendingResponse?.cancel()
         pendingResponse = null
         rxBuffer.clear()
+        use29BitCan = false
         _state.value = Obd2State.Disconnected
     }
 
@@ -271,20 +269,24 @@ class Obd2Manager(private val context: Context) {
         }
     }
 
-    // -- High-level init sequence
+    // -- High-level init sequence with automatic 29-bit CAN detection
 
     suspend fun initialize(): Boolean {
         _state.value = Obd2State.Initializing
         clearCommandLog()
+        use29BitCan = false
         return try {
-            sendCommand("ATZ", 5_000)   // cold reset — longer timeout
-            delay(1_200)                // ELM327 needs time to finish reset
+            sendCommand("ATZ", 5_000)
+            delay(1_200)
             sendCommand("ATE0"); delay(100)
             sendCommand("ATL0"); delay(100)
-            sendCommand("ATH1"); delay(100)
-            sendCommand("ATSP0"); delay(100)
+            sendCommand("ATH1"); delay(100)  // headers on — needed for ECU ID discovery
             sendCommand("ATAT1"); delay(100)
-            sendCommand("ATDP")         // log detected protocol
+
+            // Detect CAN protocol: try 29-bit first, fall back to auto
+            use29BitCan = detect29BitCan()
+            sendCommand("ATDP")  // log detected protocol
+
             _state.value = Obd2State.Ready
             true
         } catch (e: Exception) {
@@ -293,13 +295,43 @@ class Obd2Manager(private val context: Context) {
         }
     }
 
-    // -- VIN reading (Mode 09 PID 02) — call BEFORE any sendUds() to avoid header pollution
+    // Try ISO 15765-4 29-bit (ATSP7). Returns true if vehicle responds.
+    private suspend fun detect29BitCan(): Boolean {
+        return try {
+            sendCommand("ATSP7"); delay(200)
+            sendCommand("ATSH 18DB33F1"); delay(100)
+            val r = sendCommand("10 01", 3_000)  // UDS default session — fast response
+            val got29bit = r.isNotBlank()
+                && !r.contains("NO DATA", ignoreCase = true)
+                && !r.contains("SEARCHING", ignoreCase = true)
+                && !r.contains("ERROR", ignoreCase = true)
+            if (!got29bit) {
+                // 29-bit didn't work — revert to auto
+                sendCommand("ATSP0"); delay(200)
+                sendCommand("ATSH 7DF"); delay(100)
+            }
+            got29bit
+        } catch (e: Exception) {
+            runCatching { sendCommand("ATSP0"); delay(200) }
+            false
+        }
+    }
+
+    // -- VIN reading (Mode 09 PID 02)
 
     suspend fun readVin(): String? = try {
-        sendCommand("ATSH 7DF") // broadcast header for standard OBD
+        if (use29BitCan) {
+            // In 29-bit mode, use ATH0 for VIN so header bytes don't pollute parsing
+            sendCommand("ATH0")
+            sendCommand("ATSH 18DB33F1")
+        } else {
+            sendCommand("ATSH 7DF")
+        }
         val response = sendCommand("0902", 6_000)
+        if (use29BitCan) sendCommand("ATH1")  // restore headers for ECU discovery
         parseVin(response)
     } catch (e: Exception) {
+        if (use29BitCan) runCatching { sendCommand("ATH1") }
         null
     }
 
@@ -317,13 +349,46 @@ class Obd2Manager(private val context: Context) {
         return if (vin.length == 17) vin else null
     }
 
-    // -- Raw UDS send/receive
+    // -- Raw UDS send/receive (physical addressing)
+    // addr = 11-bit CAN address (legacy) OR ECU ID byte (29-bit mode, e.g. 0x11)
 
     suspend fun sendUds(ecuAddress: Int, pdu: ByteArray): ByteArray {
-        sendCommand("ATSH %03X".format(ecuAddress))
+        if (use29BitCan) {
+            // 29-bit physical: tester → ECU: 18DA{ecu}F1, ECU → tester: 18DAF1{ecu}
+            sendCommand("ATH0")  // no headers in response — avoids parsing ambiguity
+            sendCommand("ATSH 18DA%02XF1".format(ecuAddress and 0xFF))
+        } else {
+            sendCommand("ATSH %03X".format(ecuAddress))
+        }
         val hexCmd = pdu.joinToString(" ") { "%02X".format(it) }
         val response = sendCommand(hexCmd, 6_000)
         return parseHexResponse(response)
+    }
+
+    // Broadcast UDS to all ECUs (29-bit functional) and return list of responding ECU IDs
+    suspend fun discoverEcuIds29Bit(): List<Int> {
+        val ids = mutableListOf<Int>()
+        try {
+            sendCommand("ATH1")          // headers on — need them to see ECU addresses
+            sendCommand("ATSH 18DB33F1") // functional broadcast (all ECUs)
+            val resp = sendCommand("10 01", 5_000)
+
+            // ELM327 may format 29-bit headers as "18 DA F1 11" (spaced) or "18DAF111" (compact)
+            val spacedPattern  = Regex("(?i)18\\s+DA\\s+F1\\s+([0-9A-Fa-f]{2})")
+            val compactPattern = Regex("(?i)18DAF1([0-9A-Fa-f]{2})")
+
+            resp.lines().forEach { line ->
+                spacedPattern.find(line)?.groupValues?.get(1)?.toIntOrNull(16)
+                    ?.takeIf { it !in ids }?.let { ids.add(it) }
+                compactPattern.find(line)?.groupValues?.get(1)?.toIntOrNull(16)
+                    ?.takeIf { it !in ids }?.let { ids.add(it) }
+            }
+
+            sendCommand("ATH0")  // restore no-headers for subsequent sendUds calls
+        } catch (e: Exception) {
+            runCatching { sendCommand("ATH0") }
+        }
+        return ids
     }
 
     private fun parseHexResponse(raw: String): ByteArray =
@@ -391,12 +456,10 @@ class Obd2Manager(private val context: Context) {
                 desc.value = BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE
                 gatt.writeDescriptor(desc)
             } else {
-                // Some clones skip CCCD — proceed directly
                 _state.value = Obd2State.AdapterFound(gatt.device)
             }
         }
 
-        // Accumulate RX chunks until the ELM327 '>' prompt appears
         override fun onCharacteristicChanged(gatt: BluetoothGatt, char: BluetoothGattCharacteristic) {
             val chunk = char.value?.toString(Charsets.US_ASCII) ?: return
             rxBuffer.append(chunk)
@@ -409,7 +472,6 @@ class Obd2Manager(private val context: Context) {
         }
 
         override fun onDescriptorWrite(gatt: BluetoothGatt, descriptor: BluetoothGattDescriptor, status: Int) {
-            // CCCD write complete — adapter is subscribed and ready for initialize()
             _state.value = Obd2State.AdapterFound(gatt.device)
         }
     }

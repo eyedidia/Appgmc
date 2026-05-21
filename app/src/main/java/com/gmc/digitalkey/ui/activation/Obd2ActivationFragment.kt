@@ -138,7 +138,8 @@ class Obd2ActivationFragment : Fragment() {
                 binding.btnStartScan.isEnabled = false
             }
             is Obd2ActivationState.DiscoveringEcus -> {
-                binding.statusText.text = "Scanning CAN bus for VCIM module (Ultium: 0x252, legacy: 0x7E0–0x7E7)…"
+                val proto = if (viewModel.obd2Manager.use29BitCan) "29-bit (ATSP7)" else "11-bit (ATSP0)"
+                binding.statusText.text = "Scanning CAN bus for VCIM module [$proto]…"
                 binding.progressBar.visibility = View.VISIBLE
                 binding.btnStartScan.isEnabled = false
             }
