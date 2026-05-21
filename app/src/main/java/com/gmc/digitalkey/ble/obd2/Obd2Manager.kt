@@ -296,18 +296,19 @@ class Obd2Manager(private val context: Context) {
     }
 
     // Try ISO 15765-4 29-bit (ATSP7). Returns true if vehicle responds.
+    // In ATSP7 mode the ELM327's default send header is already 18DB33F1 (functional broadcast).
+    // Never call ATSH/ATCP for functional broadcast — many ELM327 clones hang when ATSH is
+    // called immediately after ATSP7, because they try to validate the header on the CAN bus.
     private suspend fun detect29BitCan(): Boolean {
         return try {
-            sendCommand("ATSP7"); delay(200)
-            set29BitHeader("18DB33F1")
-            val r = sendCommand("10 01", 3_000)
+            sendCommand("ATSP7"); delay(300)
+            val r = sendCommand("10 01", 5_000)
             val got29bit = r.isNotBlank()
                 && !r.contains("NO DATA", ignoreCase = true)
                 && !r.contains("SEARCHING", ignoreCase = true)
                 && !r.contains("ERROR", ignoreCase = true)
             if (!got29bit) {
                 sendCommand("ATSP0"); delay(200)
-                sendCommand("ATSH 7DF"); delay(100)
             }
             got29bit
         } catch (e: Exception) {
@@ -316,27 +317,12 @@ class Obd2Manager(private val context: Context) {
         }
     }
 
-    // ELM327 clones reject ATSH with 8 hex chars (4 bytes).
-    // For 29-bit CAN: ATCP {priority_byte} + ATSH {3_bytes} instead of ATSH {4_bytes}.
-    private suspend fun set29BitHeader(addr8Hex: String) {
-        if (addr8Hex.length == 8) {
-            val priority = addr8Hex.substring(0, 2)
-            val header3  = addr8Hex.substring(2)
-            try { sendCommand("ATCP $priority", 2_000) } catch (_: Exception) {}
-            sendCommand("ATSH $header3", 2_000)
-        } else {
-            sendCommand("ATSH $addr8Hex", 2_000)
-        }
-        delay(50)
-    }
-
     // -- VIN reading (Mode 09 PID 02)
 
     suspend fun readVin(): String? = try {
         if (use29BitCan) {
-            // In 29-bit mode, use ATH0 for VIN so header bytes don't pollute parsing
             sendCommand("ATH0")
-            set29BitHeader("18DB33F1")
+            // ATSP7 default send header is already 18DB33F1 — no ATSH needed
         } else {
             sendCommand("ATSH 7DF")
         }
@@ -367,9 +353,9 @@ class Obd2Manager(private val context: Context) {
 
     suspend fun sendUds(ecuAddress: Int, pdu: ByteArray): ByteArray {
         if (use29BitCan) {
-            // 29-bit physical: tester → ECU: 18DA{ecu}F1, ECU → tester: 18DAF1{ecu}
-            sendCommand("ATH0")  // no headers in response — avoids parsing ambiguity
-            set29BitHeader("18DA%02XF1".format(ecuAddress and 0xFF))
+            sendCommand("ATH0")
+            // 3-byte ATSH sets DA{ecu}F1; ELM327 prepends default priority 0x18 → 18DA{ecu}F1
+            sendCommand("ATSH DA%02XF1".format(ecuAddress and 0xFF))
         } else {
             sendCommand("ATSH %03X".format(ecuAddress))
         }
@@ -382,8 +368,8 @@ class Obd2Manager(private val context: Context) {
     suspend fun discoverEcuIds29Bit(): List<Int> {
         val ids = mutableListOf<Int>()
         try {
-            sendCommand("ATH1")        // headers on — need them to see ECU addresses
-            set29BitHeader("18DB33F1") // functional broadcast (all ECUs)
+            sendCommand("ATH1")
+            // ATSP7 default send header is already 18DB33F1 — no ATSH needed
             val resp = sendCommand("10 01", 5_000)
 
             // ELM327 may format 29-bit headers as "18 DA F1 11" (spaced) or "18DAF111" (compact)
