@@ -27,6 +27,9 @@ object GmVcimActivation {
         byteArrayOf(0xF1.toByte(), 0xB0.toByte()), // Connectivity feature config
         byteArrayOf(0xF1.toByte(), 0x8D.toByte()), // BLE Radio On/Off
         byteArrayOf(0xF1.toByte(), 0xA1.toByte()), // Module feature config 2
+        byteArrayOf(0xF1.toByte(), 0xC0.toByte()), // Connected Services feature flags
+        byteArrayOf(0xF1.toByte(), 0xC1.toByte()), // Connected Services feature flags 2
+        byteArrayOf(0x02.toByte(), 0x1C.toByte()), // GM BLE pairing enable (Ultium alt)
     )
     private val DID_BLE_ENABLE_VALUE = byteArrayOf(0x01)
 
@@ -152,38 +155,45 @@ object GmVcimActivation {
                 }
             }
 
-            // 3. SecurityAccess Level 1 — request a FRESH seed before every key attempt.
+            // 3. SecurityAccess — request a FRESH seed before every key attempt.
             // After any failed key (NRC 0x13/0x35/0x24), the ECU resets its SecurityAccess
             // state and will return NRC 0x24 (sequence error) to any subsequent key without
             // a new seed request. Re-request session + seed before each attempt.
             var unlocked = false
             var lastFullSeed = ByteArray(0)
-            val keyAlgorithms: List<(ByteArray) -> ByteArray> = listOf(
-                // Alg 1: 32-byte NOT — matches 32-byte challenge; NRC 0x13 proved 4B is too short
-                { seed -> seed.map { (it.toInt().inv() and 0xFF).toByte() }.toByteArray() },
-                // Alg 2: 16-byte NOT of nonce (bytes 16-31) — AES-128-sized response
-                { seed -> if (seed.size >= 32) seed.drop(16).take(16)
-                              .map { (it.toInt().inv() and 0xFF).toByte() }.toByteArray()
-                          else seed.map { (it.toInt().inv() and 0xFF).toByte() }.toByteArray() },
+
+            // L1 key algorithms (seed typically 32 bytes on Ultium AES-128 challenge)
+            val keyAlgorithmsL1 = listOf(
+                // Confirmed: 32-byte seed requires 32-byte key (NRC 0x13 on 4-byte)
+                "32B-NOT"       to { seed: ByteArray -> seed.map { (it.toInt().inv() and 0xFF).toByte() }.toByteArray() },
+                "16B-NOT-nonce" to { seed: ByteArray ->
+                    if (seed.size >= 32) seed.drop(16).take(16).map { (it.toInt().inv() and 0xFF).toByte() }.toByteArray()
+                    else seed.map { (it.toInt().inv() and 0xFF).toByte() }.toByteArray()
+                },
+                "32B-XOR-A5"    to { seed: ByteArray -> seed.map { (it.toInt() xor 0xA5 and 0xFF).toByte() }.toByteArray() },
+                "16B-XOR-nonce" to { seed: ByteArray ->
+                    if (seed.size >= 32) seed.drop(16).take(16).map { (it.toInt() xor 0xA5 and 0xFF).toByte() }.toByteArray()
+                    else seed.map { (it.toInt() xor 0xA5 and 0xFF).toByte() }.toByteArray()
+                },
             )
 
-            for ((algIdx, algFn) in keyAlgorithms.withIndex()) {
+            for ((algName, algFn) in keyAlgorithmsL1) {
                 // Re-open extended session (may have timed out between attempts)
                 manager.sendUds(vcimAddress, byteArrayOf(SVC_DIAGNOSTIC_SESSION, SESSION_EXTENDED))
 
                 // Request a fresh seed — CRITICAL: each attempt needs its own seed
                 val seedR = manager.sendUds(vcimAddress, byteArrayOf(SVC_SECURITY_ACCESS, SEC_SEED_L1))
                 if (seedR.firstOrNull() != 0x67.toByte() || seedR.size < 3) {
-                    stepLog += StepResult("SecurityAccess L1 seed (attempt ${algIdx + 1})", false,
+                    stepLog += StepResult("SecurityAccess L1 seed ($algName)", false,
                         if (seedR.isEmpty()) "No response" else seedR.toHex())
                     continue
                 }
                 val freshSeed = seedR.drop(2).toByteArray()
                 lastFullSeed = freshSeed
-                if (algIdx == 0) {
+                if (algName == "32B-NOT") {
                     stepLog += StepResult("SecurityAccess L1 (0x01) seed", true,
                         "Seed: ${freshSeed.take(4).toByteArray().toHex()} (full ${freshSeed.size}B)")
-                    Log.i(TAG, "Full seed: ${freshSeed.toHex()}")
+                    Log.i(TAG, "Full L1 seed: ${freshSeed.toHex()}")
                 }
 
                 val key = algFn(freshSeed)
@@ -192,7 +202,7 @@ object GmVcimActivation {
                 val nrc = keyResp.getOrNull(2)
                 when {
                     keyResp.firstOrNull() == 0x67.toByte() -> {
-                        stepLog += StepResult("SecurityAccess L1 unlock (alg${algIdx + 1}, ${key.size}B)", true,
+                        stepLog += StepResult("SecurityAccess L1 unlock ($algName, ${key.size}B)", true,
                             "Unlocked! Key: ${key.toHex()}")
                         unlocked = true
                     }
@@ -203,16 +213,82 @@ object GmVcimActivation {
                             "SecurityAccess locked out — too many wrong keys.\n\nWait 10 minutes then retry.")
                     }
                     nrc == 0x13.toByte() ->
-                        stepLog += StepResult("SecurityAccess L1 key alg${algIdx + 1} (${key.size}B)", false,
+                        stepLog += StepResult("SecurityAccess L1 key $algName (${key.size}B)", false,
                             "NRC 0x13 — wrong key length for this ECU — tried: ${key.toHex()}")
                     nrc == 0x35.toByte() ->
-                        stepLog += StepResult("SecurityAccess L1 key alg${algIdx + 1} (${key.size}B)", false,
+                        stepLog += StepResult("SecurityAccess L1 key $algName (${key.size}B)", false,
                             "NRC 0x35 — wrong key value — tried: ${key.toHex()}")
                     else ->
-                        stepLog += StepResult("SecurityAccess L1 key alg${algIdx + 1} (${key.size}B)", false,
+                        stepLog += StepResult("SecurityAccess L1 key $algName (${key.size}B)", false,
                             "${nrc?.let { "NRC 0x%02X".format(it) } ?: keyResp.toHex()} — tried: ${key.toHex()}")
                 }
                 if (unlocked) break
+            }
+
+            // SecurityAccess Level 3 (0x05/0x06) — try after L1 fails.
+            // L3 often uses a simpler 4-byte algorithm (LFSR or XOR) on older-style Ultium modules.
+            if (!unlocked) {
+                val keyAlgorithmsL3 = listOf(
+                    "LFSR"      to { seed: ByteArray -> gmLfsrKey(seed.take(4).toByteArray().toLong32()).toBytes4() },
+                    "XOR-A5"    to { seed: ByteArray -> seed.take(4).map { (it.toInt() xor 0xA5 and 0xFF).toByte() }.toByteArray() },
+                    "4B-NOT"    to { seed: ByteArray -> seed.take(4).map { (it.toInt().inv() and 0xFF).toByte() }.toByteArray() },
+                    "32B-NOT"   to { seed: ByteArray -> seed.map { (it.toInt().inv() and 0xFF).toByte() }.toByteArray() },
+                    "32B-XOR-A5" to { seed: ByteArray -> seed.map { (it.toInt() xor 0xA5 and 0xFF).toByte() }.toByteArray() },
+                )
+
+                for ((algName, algFn) in keyAlgorithmsL3) {
+                    manager.sendUds(vcimAddress, byteArrayOf(SVC_DIAGNOSTIC_SESSION, SESSION_EXTENDED))
+                    val seedR = manager.sendUds(vcimAddress, byteArrayOf(SVC_SECURITY_ACCESS, SEC_SEED_L3))
+                    if (seedR.firstOrNull() != 0x67.toByte() || seedR.size < 3) {
+                        // NRC 0x12 = subFunction not supported → L3 not available on this module
+                        val nrcByte = seedR.getOrNull(2)
+                        if (nrcByte == 0x12.toByte() || nrcByte == 0x31.toByte()) {
+                            stepLog += StepResult("SecurityAccess L3 seed", false,
+                                "NRC 0x%02X — Level 3 not supported on this ECU".format(nrcByte))
+                            break
+                        }
+                        stepLog += StepResult("SecurityAccess L3 seed ($algName)", false,
+                            if (seedR.isEmpty()) "No response" else seedR.toHex())
+                        continue
+                    }
+                    val freshSeed = seedR.drop(2).toByteArray()
+                    if (lastFullSeed.isEmpty()) lastFullSeed = freshSeed
+                    if (algName == "LFSR") {
+                        stepLog += StepResult("SecurityAccess L3 (0x05) seed", true,
+                            "Seed: ${freshSeed.toHex()} (${freshSeed.size}B)")
+                        Log.i(TAG, "Full L3 seed: ${freshSeed.toHex()}")
+                    }
+
+                    val key = algFn(freshSeed)
+                    val keyResp = manager.sendUds(vcimAddress,
+                        byteArrayOf(SVC_SECURITY_ACCESS, SEC_KEY_L3, *key))
+                    val nrc = keyResp.getOrNull(2)
+                    when {
+                        keyResp.firstOrNull() == 0x67.toByte() -> {
+                            stepLog += StepResult("SecurityAccess L3 unlock ($algName, ${key.size}B)", true,
+                                "Unlocked! Key: ${key.toHex()}")
+                            unlocked = true
+                        }
+                        nrc == 0x36.toByte() -> {
+                            stepLog += StepResult("SecurityAccess L3 unlock", false, "LOCKED OUT (0x36)")
+                            return ActivationResult.CommunicationError(
+                                "SecurityAccess locked out — too many wrong keys.\n\nWait 10 minutes then retry.")
+                        }
+                        nrc == 0x22.toByte() ->
+                            stepLog += StepResult("SecurityAccess L3 key $algName", false,
+                                "NRC 0x22 — conditions not met (L3 requires prog session?)")
+                        nrc == 0x13.toByte() ->
+                            stepLog += StepResult("SecurityAccess L3 key $algName (${key.size}B)", false,
+                                "NRC 0x13 — wrong key length — tried: ${key.toHex()}")
+                        nrc == 0x35.toByte() ->
+                            stepLog += StepResult("SecurityAccess L3 key $algName (${key.size}B)", false,
+                                "NRC 0x35 — wrong key value — tried: ${key.toHex()}")
+                        else ->
+                            stepLog += StepResult("SecurityAccess L3 key $algName (${key.size}B)", false,
+                                "${nrc?.let { "NRC 0x%02X".format(it) } ?: keyResp.toHex()} — tried: ${key.toHex()}")
+                    }
+                    if (unlocked) break
+                }
             }
 
             if (unlocked) {
@@ -268,7 +344,8 @@ object GmVcimActivation {
             0xF190, 0xF18C, 0xF100, 0xF101, 0xF18A, 0xF18B, 0xF195,
             0xF1A0, 0xF1A1, 0xF1A2, 0xF1A3,
             0xF1B0, 0xF1B1, 0xF1B2, 0xF1B3,
-            0xF18D, 0x021A, 0x021E,
+            0xF1C0, 0xF1C1, 0xF1C2, 0xF1C3,  // Connected Services feature flags
+            0xF18D, 0x021A, 0x021C, 0x021D, 0x021E,  // 021C/021D: GM BLE enable variants
             0x4100, 0x4101, 0x4102, 0x4103,
             0x4110, 0x4111, 0x4112, 0x4113,
             0x4120, 0x4121, 0x4130,
