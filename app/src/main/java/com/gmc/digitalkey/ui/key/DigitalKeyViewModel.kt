@@ -77,6 +77,7 @@ class DigitalKeyViewModel(app: Application) : AndroidViewModel(app) {
         viewModelScope.launch {
             val vehicleId = UUID.randomUUID().toString()
             val publicKey = KeyCredentialStore.generateKeyPair(vehicleId)
+            KeyCredentialStore.generateEcKeyPair(vehicleId)  // also generate ECDSA for BLE pairing
             val label = if (vin.length == 17) "${model.displayName} (${vin.takeLast(6)})" else displayName
             val entity = VehicleEntity(
                 id = vehicleId,
@@ -89,8 +90,13 @@ class DigitalKeyViewModel(app: Application) : AndroidViewModel(app) {
                 publicKeyBytes = publicKey.encoded
             )
             db.vehicleDao().insert(entity)
-            bleManager.connect(device, vehicleId)
+            // Use pairing mode on first connect — sends PAIRING_REQUEST + EC public key
+            bleManager.pair(device, vehicleId)
         }
+    }
+
+    fun dumpVehicleGatt(device: BluetoothDevice) {
+        bleManager.dumpGatt(device)
     }
 
     fun unpairVehicle(vehicleId: String) {
