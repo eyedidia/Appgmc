@@ -353,14 +353,25 @@ class Obd2Manager(private val context: Context) {
 
     suspend fun sendUds(ecuAddress: Int, pdu: ByteArray): ByteArray {
         if (use29BitCan) {
-            sendCommand("ATH0")
-            // 3-byte ATSH sets DA{ecu}F1; ELM327 prepends default priority 0x18 → 18DA{ecu}F1
-            sendCommand("ATSH DA%02XF1".format(ecuAddress and 0xFF))
+            // ATH0 and ATSH can intermittently time out on ELM327 clones when the CAN bus still
+            // has residual frames from the previous UDS response. Retry once with a settling delay.
+            for (cmd in listOf(
+                "ATH0",
+                "ATSH DA%02XF1".format(ecuAddress and 0xFF)
+            )) {
+                try {
+                    sendCommand(cmd)
+                } catch (e: Exception) {
+                    delay(400)
+                    sendCommand(cmd)
+                }
+            }
         } else {
             sendCommand("ATSH %03X".format(ecuAddress))
         }
         val hexCmd = pdu.joinToString(" ") { "%02X".format(it) }
         val response = sendCommand(hexCmd, 6_000)
+        delay(200)  // let bus settle — prevents next ATH0/ATSH from timing out
         return parseHexResponse(response)
     }
 

@@ -87,8 +87,15 @@ object GmVcimActivation {
     suspend fun findVcimAddress(manager: Obd2Manager, ecus: List<Int>,
                                 stepLog: MutableList<StepResult> = mutableListOf()): Int {
         val candidates = when {
-            ecus.isNotEmpty() -> ecus
-            manager.use29BitCan -> (0x10..0x7F).toList()
+            ecus.isNotEmpty() -> {
+                if (manager.use29BitCan) {
+                    // Ultium platform: K73 VCIM is at 0x45 — always probe it first
+                    val sorted = ecus.toMutableList()
+                    if (sorted.remove(0x45)) sorted.add(0, 0x45)
+                    sorted
+                } else ecus
+            }
+            manager.use29BitCan -> listOf(0x45) + (0x10..0x7F).filter { it != 0x45 }
             else -> LEGACY_ECU_RANGE.toList()
         }
 
