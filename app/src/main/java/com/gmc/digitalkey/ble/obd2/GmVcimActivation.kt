@@ -133,25 +133,67 @@ object GmVcimActivation {
                     "VCIM $addrStr rejected extended session.\n\nEnsure vehicle ignition is ON.")
             }
 
-            // 2. Try DID writes without SecurityAccess
-            for (did in BLE_DID_CANDIDATES) {
-                val writeResp = manager.sendUds(vcimAddress,
-                    byteArrayOf(SVC_WRITE_DATA_BY_ID, *did, *DID_BLE_ENABLE_VALUE))
-                val nrc = writeResp.getOrNull(2)
-                when {
-                    writeResp.firstOrNull() == 0x6E.toByte() -> {
-                        stepLog += StepResult("Write DID ${did.toHex()}", true, "BLE enabled!")
-                        return ActivationResult.Success(vcimAddress)
+            // 2. Probe F1A0 only — all other DIDs return NRC 0x31 (not supported) on VCIM 0x45.
+            //    A single write attempt tells us whether SecurityAccess is needed without
+            //    wasting time on unsupported DIDs that risk timeouts (especially F1C1).
+            val writeF1A0Pre = try {
+                manager.sendUds(vcimAddress,
+                    byteArrayOf(SVC_WRITE_DATA_BY_ID, 0xF1.toByte(), 0xA0.toByte(), *DID_BLE_ENABLE_VALUE))
+            } catch (e: Exception) { byteArrayOf() }
+            when {
+                writeF1A0Pre.firstOrNull() == 0x6E.toByte() -> {
+                    stepLog += StepResult("Write DID F1A0", true, "BLE enabled without SecurityAccess!")
+                    return ActivationResult.Success(vcimAddress)
+                }
+                writeF1A0Pre.getOrNull(2) == 0x22.toByte() ->
+                    stepLog += StepResult("Write DID F1A0", false, "NRC 0x22 — SecurityAccess required")
+                writeF1A0Pre.getOrNull(2) == 0x33.toByte() ->
+                    stepLog += StepResult("Write DID F1A0", false, "NRC 0x33 — SecurityAccess required")
+                writeF1A0Pre.getOrNull(2) == 0x31.toByte() ->
+                    stepLog += StepResult("Write DID F1A0", false, "NRC 0x31 — DID not found (wrong ECU?)")
+                writeF1A0Pre.isEmpty() ->
+                    stepLog += StepResult("Write DID F1A0", false, "No response")
+                else ->
+                    stepLog += StepResult("Write DID F1A0", false,
+                        writeF1A0Pre.getOrNull(2)?.let { "NRC 0x%02X".format(it) } ?: writeF1A0Pre.toHex())
+            }
+
+            // 2b. RoutineControl (0x31) — some BLE activation paths are routines, not DID writes.
+            //     Try before SecurityAccess since routines may not require SA.
+            for ((routineId, label) in listOf(
+                byteArrayOf(0xF1.toByte(), 0xA0.toByte()) to "F1A0 BLE-enable routine",
+                byteArrayOf(0x02.toByte(), 0x01.toByte()) to "0201 telematics-BLE routine",
+                byteArrayOf(0x04.toByte(), 0x01.toByte()) to "0401 connected-services routine",
+                byteArrayOf(0xF1.toByte(), 0xC1.toByte()) to "F1C1 feature-flag routine",
+            )) {
+                try {
+                    val r = manager.sendUds(vcimAddress,
+                        byteArrayOf(0x31.toByte(), 0x01.toByte(), *routineId))
+                    when {
+                        r.firstOrNull() == 0x71.toByte() -> {
+                            stepLog += StepResult("RoutineControl $label (pre-SA)", true,
+                                "Routine started: ${r.toHex()}")
+                            // Check if this flipped F1A0
+                            val check = try {
+                                manager.sendUds(vcimAddress,
+                                    byteArrayOf(SVC_READ_DATA_BY_ID, 0xF1.toByte(), 0xA0.toByte()))
+                            } catch (e: Exception) { byteArrayOf() }
+                            if (check.firstOrNull() == 0x62.toByte() && check.size > 3) {
+                                val v = check.drop(3).toByteArray()
+                                stepLog += StepResult("Read F1A0 after routine", true, "Value: ${v.toHex()}")
+                                if (v.firstOrNull() == 0x01.toByte())
+                                    return ActivationResult.Success(vcimAddress)
+                            }
+                        }
+                        r.getOrNull(2) == 0x33.toByte() || r.getOrNull(2) == 0x22.toByte() ->
+                            stepLog += StepResult("RoutineControl $label (pre-SA)", false,
+                                "NRC 0x%02X — SA required".format(r.getOrNull(2)))
+                        else ->
+                            stepLog += StepResult("RoutineControl $label (pre-SA)", false,
+                                r.getOrNull(2)?.let { "NRC 0x%02X".format(it) } ?: if (r.isEmpty()) "No response" else r.toHex())
                     }
-                    nrc == 0x33.toByte() ->
-                        stepLog += StepResult("Write DID ${did.toHex()}", false, "NRC 0x33 — SecurityAccess required")
-                    nrc == 0x22.toByte() ->
-                        stepLog += StepResult("Write DID ${did.toHex()}", false, "NRC 0x22 — conditions not met (needs SecurityAccess)")
-                    nrc == 0x31.toByte() ->
-                        stepLog += StepResult("Write DID ${did.toHex()}", false, "NRC 0x31 — DID not supported")
-                    else ->
-                        stepLog += StepResult("Write DID ${did.toHex()}", false,
-                            if (writeResp.isEmpty()) "No response" else writeResp.toHex())
+                } catch (e: Exception) {
+                    stepLog += StepResult("RoutineControl $label (pre-SA)", false, "Timeout: ${e.message}")
                 }
             }
 
@@ -225,6 +267,67 @@ object GmVcimActivation {
                 if (unlocked) break
             }
 
+            // SecurityAccess Level 2 (0x03/0x04) — try after L1 fails.
+            // Level 2 may use a different (simpler) algorithm than L1.
+            if (!unlocked) {
+                val keyAlgorithmsL2 = listOf(
+                    "LFSR"      to { seed: ByteArray -> gmLfsrKey(seed.take(4).toByteArray().toLong32()).toBytes4() },
+                    "XOR-A5"    to { seed: ByteArray -> seed.take(4).map { (it.toInt() xor 0xA5 and 0xFF).toByte() }.toByteArray() },
+                    "4B-NOT"    to { seed: ByteArray -> seed.take(4).map { (it.toInt().inv() and 0xFF).toByte() }.toByteArray() },
+                    "32B-NOT"   to { seed: ByteArray -> seed.map { (it.toInt().inv() and 0xFF).toByte() }.toByteArray() },
+                    "32B-XOR-A5" to { seed: ByteArray -> seed.map { (it.toInt() xor 0xA5 and 0xFF).toByte() }.toByteArray() },
+                )
+                for ((algName, algFn) in keyAlgorithmsL2) {
+                    manager.sendUds(vcimAddress, byteArrayOf(SVC_DIAGNOSTIC_SESSION, SESSION_EXTENDED))
+                    val seedR = manager.sendUds(vcimAddress,
+                        byteArrayOf(SVC_SECURITY_ACCESS, 0x03.toByte()))
+                    if (seedR.firstOrNull() != 0x67.toByte() || seedR.size < 3) {
+                        val nrcByte = seedR.getOrNull(2)
+                        if (nrcByte == 0x12.toByte() || nrcByte == 0x31.toByte()) {
+                            stepLog += StepResult("SecurityAccess L2 seed", false,
+                                "NRC 0x%02X — Level 2 not supported".format(nrcByte))
+                            break
+                        }
+                        stepLog += StepResult("SecurityAccess L2 seed ($algName)", false,
+                            if (seedR.isEmpty()) "No response" else seedR.toHex())
+                        continue
+                    }
+                    val freshSeed = seedR.drop(2).toByteArray()
+                    if (lastFullSeed.isEmpty()) lastFullSeed = freshSeed
+                    if (algName == "LFSR") {
+                        stepLog += StepResult("SecurityAccess L2 (0x03) seed", true,
+                            "Seed: ${freshSeed.toHex()} (${freshSeed.size}B)")
+                        Log.i(TAG, "Full L2 seed: ${freshSeed.toHex()}")
+                    }
+                    val key = algFn(freshSeed)
+                    val keyResp = manager.sendUds(vcimAddress,
+                        byteArrayOf(SVC_SECURITY_ACCESS, 0x04.toByte(), *key))
+                    val nrc = keyResp.getOrNull(2)
+                    when {
+                        keyResp.firstOrNull() == 0x67.toByte() -> {
+                            stepLog += StepResult("SecurityAccess L2 unlock ($algName, ${key.size}B)", true,
+                                "Unlocked! Key: ${key.toHex()}")
+                            unlocked = true
+                        }
+                        nrc == 0x36.toByte() -> {
+                            stepLog += StepResult("SecurityAccess L2 unlock", false, "LOCKED OUT (0x36)")
+                            return ActivationResult.CommunicationError(
+                                "SecurityAccess locked out — wait 10 minutes then retry.")
+                        }
+                        nrc == 0x13.toByte() ->
+                            stepLog += StepResult("SecurityAccess L2 key $algName (${key.size}B)", false,
+                                "NRC 0x13 — wrong key length — tried: ${key.toHex()}")
+                        nrc == 0x35.toByte() ->
+                            stepLog += StepResult("SecurityAccess L2 key $algName (${key.size}B)", false,
+                                "NRC 0x35 — wrong key value — tried: ${key.toHex()}")
+                        else ->
+                            stepLog += StepResult("SecurityAccess L2 key $algName (${key.size}B)", false,
+                                "${nrc?.let { "NRC 0x%02X".format(it) } ?: keyResp.toHex()} — tried: ${key.toHex()}")
+                    }
+                    if (unlocked) break
+                }
+            }
+
             // SecurityAccess Level 3 (0x05/0x06) — try after L1 fails.
             // L3 often uses a simpler 4-byte algorithm (LFSR or XOR) on older-style Ultium modules.
             if (!unlocked) {
@@ -292,32 +395,72 @@ object GmVcimActivation {
             }
 
             if (unlocked) {
-                // Retry DID writes with SecurityAccess unlocked
+                // Retry DID writes with SecurityAccess unlocked.
+                // Each write is wrapped individually — a timeout on one DID won't abort the rest.
                 for (did in BLE_DID_CANDIDATES) {
-                    // For F1A0: read-modify-write — set bit 0 on current value
-                    val writeValue: ByteArray = if (did.contentEquals(byteArrayOf(0xF1.toByte(), 0xA0.toByte()))) {
-                        val readR = manager.sendUds(vcimAddress, byteArrayOf(SVC_READ_DATA_BY_ID, *did))
-                        if (readR.firstOrNull() == 0x62.toByte() && readR.size > 3) {
-                            val curr = readR.drop(3).toByteArray()
-                            stepLog += StepResult("Read DID F1A0", true, "Current: ${curr.toHex()}")
-                            curr.copyOf().also { it[0] = (it[0].toInt() or 0x01).toByte() }
+                    try {
+                        // For F1A0: read-modify-write — set bit 0 on current value
+                        val writeValue: ByteArray = if (did.contentEquals(byteArrayOf(0xF1.toByte(), 0xA0.toByte()))) {
+                            val readR = try {
+                                manager.sendUds(vcimAddress, byteArrayOf(SVC_READ_DATA_BY_ID, *did))
+                            } catch (e: Exception) { byteArrayOf() }
+                            if (readR.firstOrNull() == 0x62.toByte() && readR.size > 3) {
+                                val curr = readR.drop(3).toByteArray()
+                                stepLog += StepResult("Read DID F1A0", true, "Current: ${curr.toHex()}")
+                                curr.copyOf().also { it[0] = (it[0].toInt() or 0x01).toByte() }
+                            } else DID_BLE_ENABLE_VALUE
                         } else DID_BLE_ENABLE_VALUE
-                    } else DID_BLE_ENABLE_VALUE
 
-                    val writeResp = manager.sendUds(vcimAddress,
-                        byteArrayOf(SVC_WRITE_DATA_BY_ID, *did, *writeValue))
-                    when {
-                        writeResp.firstOrNull() == 0x6E.toByte() -> {
-                            stepLog += StepResult("Write DID ${did.toHex()} (unlocked)", true,
-                                "BLE enabled! Value: ${writeValue.toHex()}")
-                            return ActivationResult.Success(vcimAddress)
+                        val writeResp = manager.sendUds(vcimAddress,
+                            byteArrayOf(SVC_WRITE_DATA_BY_ID, *did, *writeValue))
+                        when {
+                            writeResp.firstOrNull() == 0x6E.toByte() -> {
+                                stepLog += StepResult("Write DID ${did.toHex()} (unlocked)", true,
+                                    "BLE enabled! Value: ${writeValue.toHex()}")
+                                return ActivationResult.Success(vcimAddress)
+                            }
+                            else -> stepLog += StepResult("Write DID ${did.toHex()} (unlocked)", false,
+                                writeResp.getOrNull(2)?.let { "NRC 0x%02X".format(it) } ?: writeResp.toHex())
                         }
-                        else -> stepLog += StepResult("Write DID ${did.toHex()} (unlocked)", false,
-                            writeResp.getOrNull(2)?.let { "NRC 0x%02X".format(it) } ?: writeResp.toHex())
+                    } catch (e: Exception) {
+                        stepLog += StepResult("Write DID ${did.toHex()} (unlocked)", false, "Timeout: ${e.message}")
                     }
                 }
+
+                // RoutineControl (0x31) — may activate BLE as a routine rather than a DID write
+                for ((routineId, label) in listOf(
+                    byteArrayOf(0xF1.toByte(), 0xA0.toByte()) to "31 F1A0 (BLE enable routine)",
+                    byteArrayOf(0x02.toByte(), 0x01.toByte()) to "31 0201 (telematics BLE)",
+                    byteArrayOf(0x04.toByte(), 0x01.toByte()) to "31 0401 (connected services)",
+                    byteArrayOf(0xF1.toByte(), 0xC1.toByte()) to "31 F1C1 (feature flag routine)",
+                )) {
+                    try {
+                        val routineResp = manager.sendUds(vcimAddress,
+                            byteArrayOf(0x31.toByte(), 0x01.toByte(), *routineId))
+                        when {
+                            routineResp.firstOrNull() == 0x71.toByte() -> {
+                                stepLog += StepResult("RoutineControl $label", true,
+                                    "Started! Response: ${routineResp.toHex()}")
+                                // After starting routine, try writing F1A0 again
+                                val rw = try {
+                                    manager.sendUds(vcimAddress,
+                                        byteArrayOf(SVC_WRITE_DATA_BY_ID, 0xF1.toByte(), 0xA0.toByte(), 0x01))
+                                } catch (e: Exception) { byteArrayOf() }
+                                if (rw.firstOrNull() == 0x6E.toByte()) {
+                                    stepLog += StepResult("Write F1A0 after routine", true, "BLE enabled!")
+                                    return ActivationResult.Success(vcimAddress)
+                                }
+                            }
+                            else -> stepLog += StepResult("RoutineControl $label", false,
+                                routineResp.getOrNull(2)?.let { "NRC 0x%02X".format(it) } ?: routineResp.toHex())
+                        }
+                    } catch (e: Exception) {
+                        stepLog += StepResult("RoutineControl $label", false, "Timeout: ${e.message}")
+                    }
+                }
+
                 stepLog += StepResult("BLE activation", false,
-                    "SecurityAccess unlocked but no candidate DID enabled BLE")
+                    "SecurityAccess unlocked but no DID/routine enabled BLE")
             }
 
             if (lastFullSeed.isNotEmpty()) {
@@ -341,11 +484,19 @@ object GmVcimActivation {
                                  stepLog: MutableList<StepResult> = mutableListOf()): Map<String, ByteArray> {
         val results = mutableMapOf<String, ByteArray>()
         val probeList = listOf(
+            // Standard GM/ISO identity DIDs
             0xF190, 0xF18C, 0xF100, 0xF101, 0xF18A, 0xF18B, 0xF195,
+            // Feature config range F180–F18F (BLE, telematics, connectivity flags)
+            0xF180, 0xF181, 0xF182, 0xF183, 0xF184, 0xF185, 0xF186, 0xF187,
+            0xF188, 0xF189, 0xF18D, 0xF18E, 0xF18F,
+            // BLE / activation DIDs
             0xF1A0, 0xF1A1, 0xF1A2, 0xF1A3,
             0xF1B0, 0xF1B1, 0xF1B2, 0xF1B3,
-            0xF1C0, 0xF1C1, 0xF1C2, 0xF1C3,  // Connected Services feature flags
-            0xF18D, 0x021A, 0x021C, 0x021D, 0x021E,  // 021C/021D: GM BLE enable variants
+            0xF1C0, 0xF1C1, 0xF1C2, 0xF1C3,
+            // GM Ultium connectivity IDs (021x range)
+            0x021A, 0x021C, 0x021D, 0x021E,
+            0x020C, 0x020A, 0x0213, 0x0216,
+            // Proprietary BLE state DIDs
             0x4100, 0x4101, 0x4102, 0x4103,
             0x4110, 0x4111, 0x4112, 0x4113,
             0x4120, 0x4121, 0x4130,
