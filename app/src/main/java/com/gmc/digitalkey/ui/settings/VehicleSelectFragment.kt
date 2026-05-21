@@ -238,14 +238,18 @@ class VehicleSelectFragment : Fragment() {
         binding.vinStatus.text = "✓ ${info.year} ${info.make} ${info.model} — model auto-selected"
     }
 
-    private fun applyFilters(devices: List<ScannedDevice>): List<ScannedDevice> = devices.filter { s ->
-        // If a valid VIN is entered, show only devices whose name contains the last 6 VIN chars
-        if (enteredVin.length == 17 && !s.name.contains(enteredVin.takeLast(6), ignoreCase = true)) return@filter false
-        if (nameFilter.isNotEmpty() && !s.name.contains(nameFilter, ignoreCase = true)) return@filter false
-        if (gmcOnlyFilter && !isGmcDevice(s.device.address)) return@filter false
-        if (closeOnlyFilter && s.rssi <= -60) return@filter false
-        if (nearOnlyFilter && s.rssi <= -70) return@filter false
-        true
+    private fun applyFilters(devices: List<ScannedDevice>): List<ScannedDevice> {
+        val filtered = devices.filter { s ->
+            if (enteredVin.length == 17 && !s.name.contains(enteredVin.takeLast(6), ignoreCase = true)) return@filter false
+            if (nameFilter.isNotEmpty() && !s.name.contains(nameFilter, ignoreCase = true)) return@filter false
+            if (gmcOnlyFilter && !s.hasGmService && !isGmcDevice(s.device.address)) return@filter false
+            if (closeOnlyFilter && s.rssi <= -60) return@filter false
+            if (nearOnlyFilter && s.rssi <= -70) return@filter false
+            true
+        }
+        // Sort: GM Digital Key vehicles first, then by RSSI (strongest signal = closest)
+        return filtered.sortedWith(compareByDescending<ScannedDevice> { it.hasGmService }
+            .thenByDescending { it.rssi })
     }
 
     private fun isGmcDevice(address: String) =
@@ -324,13 +328,15 @@ class VehicleSelectFragment : Fragment() {
                 layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
             }
 
+            val isGmService = scanned.hasGmService
             textBlock.addView(TextView(requireContext()).apply {
-                val prefix = when { isVinMatch -> "✓ "; isGmc -> "★ "; else -> "" }
+                val prefix = when { isVinMatch -> "✓ "; isGmService -> "★ "; isGmc -> "★ "; else -> "" }
                 text = "$prefix${scanned.name}"
                 setTextColor(requireContext().getColor(when {
-                    isVinMatch -> R.color.status_connected
-                    isGmc -> R.color.gmc_red
-                    else -> R.color.text_primary
+                    isVinMatch  -> R.color.status_connected
+                    isGmService -> R.color.gmc_red
+                    isGmc       -> R.color.gmc_red
+                    else        -> R.color.text_primary
                 }))
                 textSize = 14f
                 setTypeface(null, Typeface.BOLD)
@@ -347,9 +353,9 @@ class VehicleSelectFragment : Fragment() {
                     textSize = 11f
                     setTypeface(null, Typeface.BOLD)
                 })
-            } else if (isGmc) {
+            } else if (isGmService) {
                 textBlock.addView(TextView(requireContext()).apply {
-                    text = "GM vehicle detected"
+                    text = "GM Digital Key service detected — this is your vehicle"
                     setTextColor(requireContext().getColor(R.color.gmc_red))
                     textSize = 11f
                 })

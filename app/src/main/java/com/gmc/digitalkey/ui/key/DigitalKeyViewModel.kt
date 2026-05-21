@@ -18,7 +18,8 @@ import java.util.*
 data class ScannedDevice(
     val device: BluetoothDevice,
     val rssi: Int,
-    val name: String
+    val name: String,
+    val hasGmService: Boolean = false  // true = advertising GM Digital Key service FE2C
 )
 
 class DigitalKeyViewModel(app: Application) : AndroidViewModel(app) {
@@ -43,18 +44,20 @@ class DigitalKeyViewModel(app: Application) : AndroidViewModel(app) {
         _scanResults.value = emptyList()
         _isScanning.value = true
         bleManager.scanAll(
-            onFound = { device, rssi ->
-                // Ignore very weak signals — user is next to their vehicle
-                if (rssi < -80) return@scanAll
+            onFound = { device, rssi, hasGmService ->
                 val name = runCatching { device.name }.getOrNull()
-                    ?.takeIf { it.isNotBlank() } ?: device.address
+                    ?.takeIf { it.isNotBlank() }
+                    ?: if (hasGmService) "GM Digital Key Vehicle" else device.address
                 val current = _scanResults.value.toMutableList()
                 val idx = current.indexOfFirst { it.device.address == device.address }
                 if (idx >= 0) {
-                    // Update RSSI in place — keep insertion order (no reordering)
-                    current[idx] = ScannedDevice(device, rssi, name)
+                    // Upgrade hasGmService flag if newly confirmed; update RSSI
+                    val prev = current[idx]
+                    current[idx] = prev.copy(rssi = rssi,
+                        hasGmService = prev.hasGmService || hasGmService,
+                        name = if (hasGmService && prev.name == prev.device.address) name else prev.name)
                 } else {
-                    current.add(ScannedDevice(device, rssi, name))
+                    current.add(ScannedDevice(device, rssi, name, hasGmService))
                 }
                 _scanResults.value = current
             },

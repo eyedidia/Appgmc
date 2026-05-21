@@ -52,7 +52,7 @@ class BleManager(private val context: Context) {
 
     // ─── Scanning ─────────────────────────────────────────────────────────────
 
-    fun scanAll(onFound: (BluetoothDevice, Int) -> Unit, onStopped: () -> Unit = {}) {
+    fun scanAll(onFound: (BluetoothDevice, Int, Boolean) -> Unit, onStopped: () -> Unit = {}) {
         if (!isBluetoothOn) { _connectionState.value = BleConnectionState.BluetoothOff; return }
         if (!hasScanPermission()) { _connectionState.value = BleConnectionState.PermissionDenied; return }
         _connectionState.value = BleConnectionState.Scanning
@@ -62,15 +62,36 @@ class BleManager(private val context: Context) {
             .setScanMode(ScanSettings.SCAN_MODE_LOW_LATENCY)
             .build()
 
-        scanner?.startScan(null, settings, object : ScanCallback() {
+        // Filtered scan: devices advertising the GM Digital Key service (FE2C)
+        val gmFilter = listOf(
+            ScanFilter.Builder()
+                .setServiceUuid(android.os.ParcelUuid(VehicleGattProfile.SERVICE_UUID))
+                .build()
+        )
+
+        val found = mutableSetOf<String>()
+
+        val gmCallback = object : ScanCallback() {
             override fun onScanResult(callbackType: Int, result: ScanResult) {
-                onFound(result.device, result.rssi)
+                found.add(result.device.address)
+                onFound(result.device, result.rssi, true)  // hasGmService = true
+            }
+        }
+
+        val allCallback = object : ScanCallback() {
+            override fun onScanResult(callbackType: Int, result: ScanResult) {
+                // Skip devices already found by GM filter
+                if (result.device.address !in found) onFound(result.device, result.rssi, false)
             }
             override fun onScanFailed(errorCode: Int) {
                 _connectionState.value = BleConnectionState.Error("BLE scan failed: $errorCode")
                 onStopped()
             }
-        })
+        }
+
+        // Run both scans in parallel — GM-filtered finds vehicle even without a name
+        scanner?.startScan(gmFilter, settings, gmCallback)
+        scanner?.startScan(null, settings, allCallback)
 
         handler.postDelayed({ stopScan(); onStopped() }, 30_000)
     }
