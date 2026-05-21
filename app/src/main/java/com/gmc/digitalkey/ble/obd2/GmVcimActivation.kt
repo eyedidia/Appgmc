@@ -152,89 +152,100 @@ object GmVcimActivation {
                 }
             }
 
-            // 3. SecurityAccess — Level 1, then Level 3 fallback
-            for ((seedLevel, keyLevel) in listOf(SEC_SEED_L1 to SEC_KEY_L1, SEC_SEED_L3 to SEC_KEY_L3)) {
-                val levelStr = if (seedLevel == SEC_SEED_L3) "L3 (0x05)" else "L1 (0x01)"
+            // 3. SecurityAccess Level 1 — request a FRESH seed before every key attempt.
+            // After any failed key (NRC 0x13/0x35/0x24), the ECU resets its SecurityAccess
+            // state and will return NRC 0x24 (sequence error) to any subsequent key without
+            // a new seed request. Re-request session + seed before each attempt.
+            var unlocked = false
+            var lastFullSeed = ByteArray(0)
+            val keyAlgorithms: List<(ByteArray) -> ByteArray> = listOf(
+                // Alg 1: 32-byte NOT — matches 32-byte challenge; NRC 0x13 proved 4B is too short
+                { seed -> seed.map { (it.toInt().inv() and 0xFF).toByte() }.toByteArray() },
+                // Alg 2: 16-byte NOT of nonce (bytes 16-31) — AES-128-sized response
+                { seed -> if (seed.size >= 32) seed.drop(16).take(16)
+                              .map { (it.toInt().inv() and 0xFF).toByte() }.toByteArray()
+                          else seed.map { (it.toInt().inv() and 0xFF).toByte() }.toByteArray() },
+            )
 
-                // Re-open session in case it timed out
+            for ((algIdx, algFn) in keyAlgorithms.withIndex()) {
+                // Re-open extended session (may have timed out between attempts)
                 manager.sendUds(vcimAddress, byteArrayOf(SVC_DIAGNOSTIC_SESSION, SESSION_EXTENDED))
 
-                val seedResp = manager.sendUds(vcimAddress, byteArrayOf(SVC_SECURITY_ACCESS, seedLevel))
-                if (seedResp.firstOrNull() != 0x67.toByte() || seedResp.size < 3) {
-                    stepLog += StepResult("SecurityAccess $levelStr seed", false,
-                        if (seedResp.isEmpty()) "No response" else seedResp.toHex())
+                // Request a fresh seed — CRITICAL: each attempt needs its own seed
+                val seedR = manager.sendUds(vcimAddress, byteArrayOf(SVC_SECURITY_ACCESS, SEC_SEED_L1))
+                if (seedR.firstOrNull() != 0x67.toByte() || seedR.size < 3) {
+                    stepLog += StepResult("SecurityAccess L1 seed (attempt ${algIdx + 1})", false,
+                        if (seedR.isEmpty()) "No response" else seedR.toHex())
                     continue
                 }
-
-                val fullSeed = seedResp.drop(2).toByteArray()
-                val seed4    = fullSeed.take(4).toByteArray()
-                stepLog += StepResult("SecurityAccess $levelStr seed", true,
-                    "Seed: ${seed4.toHex()} (full ${fullSeed.size}B)")
-                Log.i(TAG, "SecurityAccess $levelStr seed (full): ${fullSeed.toHex()}")
-
-                // Try computed key candidates — STOP immediately on lockout (NRC 0x36)
-                val keyCandidates = computeSecurityKeyCandidates(seed4)
-                var unlocked = false
-
-                for ((algIdx, key) in keyCandidates.withIndex()) {
-                    val keyResp = manager.sendUds(vcimAddress,
-                        byteArrayOf(SVC_SECURITY_ACCESS, keyLevel, *key))
-                    val nrc = keyResp.getOrNull(2)
-                    when {
-                        keyResp.firstOrNull() == 0x67.toByte() -> {
-                            stepLog += StepResult("SecurityAccess $levelStr unlock (alg${algIdx + 1})", true,
-                                "Unlocked! Key: ${key.toHex()}")
-                            unlocked = true
-                        }
-                        nrc == 0x36.toByte() -> {
-                            stepLog += StepResult("SecurityAccess $levelStr unlock", false,
-                                "LOCKED OUT (0x36) — wait 10 min before retry")
-                            return ActivationResult.CommunicationError(
-                                "SecurityAccess locked out — too many wrong keys.\n\nWait 10 minutes then retry.")
-                        }
-                        else -> {
-                            val nrcStr = nrc?.let { "NRC 0x%02X".format(it) } ?: keyResp.toHex()
-                            stepLog += StepResult("SecurityAccess $levelStr key alg${algIdx + 1}", false,
-                                "$nrcStr — tried: ${key.toHex()}")
-                        }
-                    }
-                    if (unlocked) break
+                val freshSeed = seedR.drop(2).toByteArray()
+                lastFullSeed = freshSeed
+                if (algIdx == 0) {
+                    stepLog += StepResult("SecurityAccess L1 (0x01) seed", true,
+                        "Seed: ${freshSeed.take(4).toByteArray().toHex()} (full ${freshSeed.size}B)")
+                    Log.i(TAG, "Full seed: ${freshSeed.toHex()}")
                 }
 
-                if (unlocked) {
-                    // Retry DID writes with SecurityAccess unlocked
-                    for (did in BLE_DID_CANDIDATES) {
-                        // For F1A0: read current value first, set BLE bit, write back
-                        val writeValue: ByteArray = if (did.contentEquals(byteArrayOf(0xF1.toByte(), 0xA0.toByte()))) {
-                            val readR = manager.sendUds(vcimAddress, byteArrayOf(SVC_READ_DATA_BY_ID, *did))
-                            if (readR.firstOrNull() == 0x62.toByte() && readR.size > 3) {
-                                val curr = readR.drop(3).toByteArray()
-                                stepLog += StepResult("Read DID F1A0", true, "Current: ${curr.toHex()}")
-                                curr.copyOf().also { it[0] = (it[0].toInt() or 0x01).toByte() }
-                            } else DID_BLE_ENABLE_VALUE
+                val key = algFn(freshSeed)
+                val keyResp = manager.sendUds(vcimAddress,
+                    byteArrayOf(SVC_SECURITY_ACCESS, SEC_KEY_L1, *key))
+                val nrc = keyResp.getOrNull(2)
+                when {
+                    keyResp.firstOrNull() == 0x67.toByte() -> {
+                        stepLog += StepResult("SecurityAccess L1 unlock (alg${algIdx + 1}, ${key.size}B)", true,
+                            "Unlocked! Key: ${key.toHex()}")
+                        unlocked = true
+                    }
+                    nrc == 0x36.toByte() -> {
+                        stepLog += StepResult("SecurityAccess L1 unlock", false,
+                            "LOCKED OUT (0x36) — wait 10 min before retry")
+                        return ActivationResult.CommunicationError(
+                            "SecurityAccess locked out — too many wrong keys.\n\nWait 10 minutes then retry.")
+                    }
+                    nrc == 0x13.toByte() ->
+                        stepLog += StepResult("SecurityAccess L1 key alg${algIdx + 1} (${key.size}B)", false,
+                            "NRC 0x13 — wrong key length for this ECU — tried: ${key.toHex()}")
+                    nrc == 0x35.toByte() ->
+                        stepLog += StepResult("SecurityAccess L1 key alg${algIdx + 1} (${key.size}B)", false,
+                            "NRC 0x35 — wrong key value — tried: ${key.toHex()}")
+                    else ->
+                        stepLog += StepResult("SecurityAccess L1 key alg${algIdx + 1} (${key.size}B)", false,
+                            "${nrc?.let { "NRC 0x%02X".format(it) } ?: keyResp.toHex()} — tried: ${key.toHex()}")
+                }
+                if (unlocked) break
+            }
+
+            if (unlocked) {
+                // Retry DID writes with SecurityAccess unlocked
+                for (did in BLE_DID_CANDIDATES) {
+                    // For F1A0: read-modify-write — set bit 0 on current value
+                    val writeValue: ByteArray = if (did.contentEquals(byteArrayOf(0xF1.toByte(), 0xA0.toByte()))) {
+                        val readR = manager.sendUds(vcimAddress, byteArrayOf(SVC_READ_DATA_BY_ID, *did))
+                        if (readR.firstOrNull() == 0x62.toByte() && readR.size > 3) {
+                            val curr = readR.drop(3).toByteArray()
+                            stepLog += StepResult("Read DID F1A0", true, "Current: ${curr.toHex()}")
+                            curr.copyOf().also { it[0] = (it[0].toInt() or 0x01).toByte() }
                         } else DID_BLE_ENABLE_VALUE
+                    } else DID_BLE_ENABLE_VALUE
 
-                        val writeResp = manager.sendUds(vcimAddress,
-                            byteArrayOf(SVC_WRITE_DATA_BY_ID, *did, *writeValue))
-                        val nrc = writeResp.getOrNull(2)
-                        when {
-                            writeResp.firstOrNull() == 0x6E.toByte() -> {
-                                stepLog += StepResult("Write DID ${did.toHex()} (unlocked)", true,
-                                    "BLE enabled! Value: ${writeValue.toHex()}")
-                                return ActivationResult.Success(vcimAddress)
-                            }
-                            else -> stepLog += StepResult("Write DID ${did.toHex()} (unlocked)", false,
-                                nrc?.let { "NRC 0x%02X".format(it) } ?: writeResp.toHex())
+                    val writeResp = manager.sendUds(vcimAddress,
+                        byteArrayOf(SVC_WRITE_DATA_BY_ID, *did, *writeValue))
+                    when {
+                        writeResp.firstOrNull() == 0x6E.toByte() -> {
+                            stepLog += StepResult("Write DID ${did.toHex()} (unlocked)", true,
+                                "BLE enabled! Value: ${writeValue.toHex()}")
+                            return ActivationResult.Success(vcimAddress)
                         }
+                        else -> stepLog += StepResult("Write DID ${did.toHex()} (unlocked)", false,
+                            writeResp.getOrNull(2)?.let { "NRC 0x%02X".format(it) } ?: writeResp.toHex())
                     }
-                    // Unlocked but no DID worked — return full seed for further research
-                    stepLog += StepResult("BLE activation", false,
-                        "Security unlocked but no candidate DID enabled BLE advertising")
-                    return ActivationResult.NeedsSecurityKey(vcimAddress, fullSeed)
                 }
+                stepLog += StepResult("BLE activation", false,
+                    "SecurityAccess unlocked but no candidate DID enabled BLE")
+            }
 
-                // Wrong key(s) — return seed for external research / manual key entry
-                return ActivationResult.NeedsSecurityKey(vcimAddress, fullSeed)
+            if (lastFullSeed.isNotEmpty()) {
+                return ActivationResult.NeedsSecurityKey(vcimAddress, lastFullSeed)
             }
 
             // 4. DID discovery (research mode)
