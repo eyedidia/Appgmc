@@ -15,6 +15,7 @@ import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.gmc.digitalkey.R
 import com.gmc.digitalkey.ble.BleConnectionState
 import com.gmc.digitalkey.ble.RawAdvert
+import android.graphics.Typeface
 import com.gmc.digitalkey.databinding.FragmentDigitalKeyBinding
 import com.gmc.digitalkey.db.VehicleEntity
 import com.journeyapps.barcodescanner.ScanContract
@@ -159,7 +160,7 @@ class DigitalKeyFragment : Fragment() {
                     if (hasMfr) append("  Mfr: ${advert.manufacturerDisplay()}")
                 }
                 textSize = 10f
-                fontFamily = "monospace"
+                typeface = Typeface.MONOSPACE
                 setTextColor(
                     requireContext().getColor(if (hasUuid) R.color.status_connected else R.color.text_secondary)
                 )
