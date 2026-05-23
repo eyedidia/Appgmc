@@ -16,6 +16,25 @@ import com.gmc.digitalkey.model.VehicleState
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import java.util.UUID
+
+/** Full BLE advertisement record — used by raw discovery scan. */
+data class RawAdvert(
+    val address: String,
+    val name: String?,
+    val rssi: Int,
+    val serviceUuids: List<UUID>,
+    val manufacturerData: Map<Int, ByteArray>,  // Bluetooth company ID → payload bytes
+    val txPower: Int?,
+) {
+    fun serviceUuidsDisplay() =
+        if (serviceUuids.isEmpty()) "—" else serviceUuids.joinToString("\n") { it.toString().uppercase() }
+
+    fun manufacturerDisplay() = if (manufacturerData.isEmpty()) "—" else
+        manufacturerData.entries.joinToString("\n") { (id, data) ->
+            "Company 0x%04X: %s".format(id, data.joinToString(" ") { "%02X".format(it) }.take(40))
+        }
+}
 
 @SuppressLint("MissingPermission")
 class BleManager(private val context: Context) {
@@ -38,6 +57,7 @@ class BleManager(private val context: Context) {
     private var reconnectAttempts = 0
     private val handler = Handler(Looper.getMainLooper())
     private var scanner: BluetoothLeScanner? = null
+    private var rawScanCallback: ScanCallback? = null
 
     val isBluetoothOn get() = adapter?.isEnabled == true
 
@@ -126,6 +146,54 @@ class BleManager(private val context: Context) {
     fun stopScan() {
         scanner?.stopScan(object : ScanCallback() {})
         scanner = null
+    }
+
+    // ─── Raw BLE discovery scan ───────────────────────────────────────────────
+    // Unfiltered scan capturing the full advertisement record of every nearby device.
+    // Used to discover the vehicle's real service UUID when it's in "Searching for Phone" mode.
+
+    fun scanRaw(onFound: (RawAdvert) -> Unit, onStopped: () -> Unit = {}) {
+        if (!isBluetoothOn) { _connectionState.value = BleConnectionState.BluetoothOff; return }
+        if (!hasScanPermission()) { _connectionState.value = BleConnectionState.PermissionDenied; return }
+
+        val leScanner = adapter.bluetoothLeScanner ?: return
+        val settings = ScanSettings.Builder()
+            .setScanMode(ScanSettings.SCAN_MODE_LOW_LATENCY)
+            .build()
+
+        val cb = object : ScanCallback() {
+            override fun onScanResult(callbackType: Int, result: ScanResult) {
+                val rec = result.scanRecord
+                val mfr: Map<Int, ByteArray> = buildMap {
+                    rec?.manufacturerSpecificData?.let { sparse ->
+                        for (i in 0 until sparse.size()) put(sparse.keyAt(i), sparse.valueAt(i))
+                    }
+                }
+                onFound(
+                    RawAdvert(
+                        address = result.device.address,
+                        name = rec?.deviceName,
+                        rssi = result.rssi,
+                        serviceUuids = rec?.serviceUuids?.map { it.uuid } ?: emptyList(),
+                        manufacturerData = mfr,
+                        txPower = rec?.txPowerLevel?.takeIf { it != Integer.MIN_VALUE },
+                    )
+                )
+            }
+            override fun onScanFailed(errorCode: Int) {
+                _connectionState.value = BleConnectionState.Error("Raw scan failed: $errorCode")
+                onStopped()
+            }
+        }
+        rawScanCallback = cb
+        leScanner.startScan(null, settings, cb)
+        handler.postDelayed({ stopRawScan(); onStopped() }, 30_000)
+    }
+
+    fun stopRawScan() {
+        val cb = rawScanCallback ?: return
+        adapter.bluetoothLeScanner?.stopScan(cb)
+        rawScanCallback = null
     }
 
     // ─── Connect (normal auth flow) ───────────────────────────────────────────

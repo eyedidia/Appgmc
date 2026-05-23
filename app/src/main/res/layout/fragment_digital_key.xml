@@ -124,6 +124,83 @@
             </LinearLayout>
         </com.google.android.material.card.MaterialCardView>
 
+        <!-- Vehicle Discovery Card (QR scan + Raw BLE) -->
+        <com.google.android.material.card.MaterialCardView
+            android:id="@+id/discovery_card"
+            style="@style/Widget.GMC.Card"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="16dp">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:padding="16dp">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="@string/discovery_title"
+                    android:textColor="@color/text_secondary"
+                    android:textSize="11sp"
+                    android:letterSpacing="0.12"
+                    android:layout_marginBottom="12dp" />
+
+                <!-- QR Scan button -->
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btn_scan_qr"
+                    style="@style/Widget.GMC.Button.Outlined"
+                    android:layout_width="match_parent"
+                    android:layout_height="48dp"
+                    android:text="@string/scan_vehicle_qr"
+                    android:layout_marginBottom="8dp" />
+
+                <!-- QR result -->
+                <TextView
+                    android:id="@+id/tv_qr_result"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:fontFamily="monospace"
+                    android:textSize="11sp"
+                    android:textColor="@color/status_connected"
+                    android:background="#0D00CC66"
+                    android:padding="10dp"
+                    android:visibility="gone"
+                    android:layout_marginBottom="12dp" />
+
+                <!-- Raw BLE scan button -->
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btn_raw_ble_scan"
+                    style="@style/Widget.GMC.Button.Outlined"
+                    android:layout_width="match_parent"
+                    android:layout_height="48dp"
+                    android:text="@string/raw_ble_scan"
+                    android:layout_marginBottom="8dp" />
+
+                <!-- Raw devices label -->
+                <TextView
+                    android:id="@+id/tv_raw_devices_label"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="@string/nearby_devices"
+                    android:textColor="@color/text_secondary"
+                    android:textSize="11sp"
+                    android:letterSpacing="0.1"
+                    android:layout_marginTop="4dp"
+                    android:layout_marginBottom="6dp"
+                    android:visibility="gone" />
+
+                <!-- Raw device entries added dynamically -->
+                <LinearLayout
+                    android:id="@+id/raw_devices_container"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical" />
+
+            </LinearLayout>
+        </com.google.android.material.card.MaterialCardView>
+
         <!-- Paired Vehicles -->
         <TextView
             android:layout_width="wrap_content"

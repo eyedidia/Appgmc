@@ -58,6 +58,13 @@
     <string name="stale_data">Last known data</string>
     <string name="no_ble_for_charge">Connect to vehicle to see live charging data</string>
 
+    <!-- Discovery / Research -->
+    <string name="discovery_title">VEHICLE DISCOVERY</string>
+    <string name="scan_vehicle_qr">Scan Vehicle QR Code</string>
+    <string name="raw_ble_scan">BLE Discovery Scan</string>
+    <string name="raw_ble_scanning">Scanning… (30s)</string>
+    <string name="nearby_devices">NEARBY BLE DEVICES</string>
+
     <!-- Settings -->
     <string name="settings_vehicle_name">Vehicle Name</string>
     <string name="settings_vin">VIN</string>

@@ -7,6 +7,8 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.gmc.digitalkey.ble.BleConnectionState
 import com.gmc.digitalkey.ble.BleManager
+import com.gmc.digitalkey.ble.QrPairingParser
+import com.gmc.digitalkey.ble.RawAdvert
 import com.gmc.digitalkey.crypto.KeyCredentialStore
 import com.gmc.digitalkey.db.AppDatabase
 import com.gmc.digitalkey.db.VehicleEntity
@@ -38,6 +40,17 @@ class DigitalKeyViewModel(app: Application) : AndroidViewModel(app) {
 
     private val _isScanning = MutableStateFlow(false)
     val isScanning: StateFlow<Boolean> = _isScanning.asStateFlow()
+
+    // ─── Raw BLE discovery + QR pairing ──────────────────────────────────────
+
+    private val _rawDevices = MutableStateFlow<List<RawAdvert>>(emptyList())
+    val rawDevices: StateFlow<List<RawAdvert>> = _rawDevices.asStateFlow()
+
+    private val _isRawScanning = MutableStateFlow(false)
+    val isRawScanning: StateFlow<Boolean> = _isRawScanning.asStateFlow()
+
+    private val _qrResult = MutableStateFlow<QrPairingParser.PairingHints?>(null)
+    val qrResult: StateFlow<QrPairingParser.PairingHints?> = _qrResult.asStateFlow()
 
     @SuppressLint("MissingPermission")
     fun startScan() {
@@ -96,6 +109,30 @@ class DigitalKeyViewModel(app: Application) : AndroidViewModel(app) {
             // Use pairing mode on first connect — sends PAIRING_REQUEST + EC public key
             bleManager.pair(device, vehicleId)
         }
+    }
+
+    fun startRawScan() {
+        _rawDevices.value = emptyList()
+        _isRawScanning.value = true
+        bleManager.scanRaw(
+            onFound = { advert ->
+                val current = _rawDevices.value.toMutableList()
+                val idx = current.indexOfFirst { it.address == advert.address }
+                if (idx >= 0) current[idx] = advert else current.add(advert)
+                current.sortByDescending { it.rssi }
+                _rawDevices.value = current
+            },
+            onStopped = { _isRawScanning.value = false }
+        )
+    }
+
+    fun stopRawScan() {
+        bleManager.stopRawScan()
+        _isRawScanning.value = false
+    }
+
+    fun onQrScanned(text: String) {
+        _qrResult.value = QrPairingParser.parse(text)
     }
 
     fun dumpVehicleGatt(device: BluetoothDevice) {
