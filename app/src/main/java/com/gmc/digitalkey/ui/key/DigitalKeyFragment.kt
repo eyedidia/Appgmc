@@ -167,7 +167,7 @@ class DigitalKeyFragment : Fragment() {
                 setPadding(0, 8, 0, 8)
             }
             val divider = View(requireContext()).apply {
-                setBackgroundColor(requireContext().getColor(R.color.surface))
+                setBackgroundColor(requireContext().getColor(R.color.bg_surface))
                 layoutParams = ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 1)
             }
             binding.rawDevicesContainer.addView(tv)
