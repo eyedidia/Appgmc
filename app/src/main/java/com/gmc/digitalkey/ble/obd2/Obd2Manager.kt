@@ -41,6 +41,23 @@ class Obd2Manager(private val context: Context) {
     var use29BitCan = false
         private set
 
+    // True when switched to 11-bit CAN mode for Ultium K73 VCIM at 0x252/0x652
+    var isUltiumMode = false
+        private set
+
+    // Switch to 11-bit CAN (ATSP6) to reach Ultium K73 VCIM at 0x252/0x652
+    suspend fun enableUltiumMode() {
+        sendCommand("ATSP6"); delay(300)
+        sendCommand("ATCRA 652"); delay(100)
+        isUltiumMode = true
+    }
+
+    // Restore 29-bit CAN (ATSP7) after Ultium probing
+    suspend fun disableUltiumMode() {
+        sendCommand("ATSP7"); delay(300)
+        isUltiumMode = false
+    }
+
     // Auto command log
     private val _commandLog = mutableListOf<Pair<String, String>>()
     val commandLog: List<Pair<String, String>> get() = synchronized(_commandLog) { _commandLog.toList() }
@@ -366,7 +383,11 @@ class Obd2Manager(private val context: Context) {
     // addr = 11-bit CAN address (legacy) OR ECU ID byte (29-bit mode, e.g. 0x11)
 
     suspend fun sendUds(ecuAddress: Int, pdu: ByteArray): ByteArray {
-        if (use29BitCan) {
+        if (isUltiumMode) {
+            // 11-bit Ultium mode — ATSP6 + ATCRA 652 already set; just update ATSH per call
+            sendCommand("ATH0")
+            sendCommand("ATSH %03X".format(ecuAddress))
+        } else if (use29BitCan) {
             // ATH0 and ATSH can intermittently time out on ELM327 clones when the CAN bus still
             // has residual frames from the previous UDS response. Retry once with a settling delay.
             for (cmd in listOf(

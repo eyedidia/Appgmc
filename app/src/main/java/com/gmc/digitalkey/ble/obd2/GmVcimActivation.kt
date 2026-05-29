@@ -35,6 +35,7 @@ object GmVcimActivation {
     private val DID_BLE_ENABLE_VALUE = byteArrayOf(0x01)
 
     private val LEGACY_ECU_RANGE = 0x7E0..0x7E7
+    private const val ULTIUM_K73_ADDR = 0x252  // K73 VCIM on Ultium platform (11-bit CAN / ATSP6)
 
     sealed class ActivationResult {
         data class Success(val vcimAddress: Int) : ActivationResult()
@@ -69,6 +70,27 @@ object GmVcimActivation {
                     }
                 } catch (_: Exception) { }
             }
+            // Probe Ultium K73 VCIM at 0x252 on 11-bit CAN (ATSP6).
+            // Silverado EV / Sierra EV / Hummer EV 2024+ route the VCIM through a separate
+            // 11-bit GMLAN segment not visible in 29-bit ATSP7 mode.
+            if (ULTIUM_K73_ADDR !in ids) {
+                try {
+                    manager.enableUltiumMode()
+                    val r = manager.sendUds(ULTIUM_K73_ADDR, byteArrayOf(SVC_DIAGNOSTIC_SESSION, SESSION_DEFAULT))
+                    if (r.firstOrNull() == 0x50.toByte()) {
+                        ids.add(ULTIUM_K73_ADDR)
+                        stepLog += StepResult("Ultium K73 VCIM (0x252)", true, "Found on 11-bit CAN (ATSP6)")
+                        // Leave Ultium mode enabled — VCIM is at 0x252 and all subsequent
+                        // sendUds(0x252, ...) calls need it.
+                    } else {
+                        manager.disableUltiumMode()
+                        stepLog += StepResult("Ultium K73 VCIM (0x252)", false, "No response on 11-bit CAN")
+                    }
+                } catch (e: Exception) {
+                    runCatching { manager.disableUltiumMode() }
+                    stepLog += StepResult("Ultium K73 VCIM (0x252)", false, e.message ?: "timeout")
+                }
+            }
             return ids
         }
         val found = mutableListOf<Int>()
@@ -90,25 +112,30 @@ object GmVcimActivation {
         val candidates = when {
             ecus.isNotEmpty() -> {
                 if (manager.use29BitCan) {
-                    // Ultium platform: K73 VCIM is at 0x45 — always probe it first
+                    // Prioritize Ultium K73 (0x252) first, then 0x45, then rest
                     val sorted = ecus.toMutableList()
                     if (sorted.remove(0x45)) sorted.add(0, 0x45)
+                    if (sorted.remove(ULTIUM_K73_ADDR)) sorted.add(0, ULTIUM_K73_ADDR)
                     sorted
                 } else ecus
             }
-            manager.use29BitCan -> listOf(0x45) + (0x10..0x7F).filter { it != 0x45 }
+            manager.use29BitCan -> listOf(ULTIUM_K73_ADDR, 0x45) + (0x10..0x7F).filter { it != 0x45 }
             else -> LEGACY_ECU_RANGE.toList()
         }
 
         for (addr in candidates) {
             try {
+                // Ensure correct CAN mode for this address
+                if (addr == ULTIUM_K73_ADDR && !manager.isUltiumMode) manager.enableUltiumMode()
+                else if (addr != ULTIUM_K73_ADDR && manager.isUltiumMode) manager.disableUltiumMode()
+
                 val sessResp = manager.sendUds(addr, byteArrayOf(SVC_DIAGNOSTIC_SESSION, SESSION_EXTENDED))
                 if (sessResp.firstOrNull() != 0x50.toByte()) continue
 
                 for (did in BLE_DID_CANDIDATES) {
                     val resp = manager.sendUds(addr, byteArrayOf(SVC_READ_DATA_BY_ID, *did))
                     if (resp.firstOrNull() == 0x62.toByte()) {
-                        val addrStr = if (manager.use29BitCan) "0x%02X".format(addr) else "0x${addr.toString(16)}"
+                        val addrStr = if (addr >= 0x100) "0x%03X".format(addr) else "0x%02X".format(addr)
                         stepLog += StepResult("VCIM address", true, "$addrStr — DID ${did.toHex()} readable")
                         return addr
                     }
@@ -116,16 +143,17 @@ object GmVcimActivation {
                 // Fall back to F1B0 (ECU ID DID — any module has it)
                 val f1b0 = manager.sendUds(addr, byteArrayOf(SVC_READ_DATA_BY_ID, 0xF1.toByte(), 0xB0.toByte()))
                 if (f1b0.firstOrNull() == 0x62.toByte()) {
-                    val addrStr = if (manager.use29BitCan) "0x%02X".format(addr) else "0x${addr.toString(16)}"
+                    val addrStr = if (addr >= 0x100) "0x%03X".format(addr) else "0x%02X".format(addr)
                     stepLog += StepResult("VCIM address", true, "$addrStr — DID F1 B0 readable")
                     return addr
                 }
             } catch (_: Exception) { }
         }
 
-        val fallback = if (manager.use29BitCan) 0x45 else 0x7E3
+        val fallback = if (manager.use29BitCan) ULTIUM_K73_ADDR else 0x7E3
         stepLog += StepResult("VCIM address", false,
-            "Not identified — using fallback ${if (manager.use29BitCan) "0x%02X".format(fallback) else "0x${fallback.toString(16)}"}")
+            "Not identified — using fallback 0x${fallback.toString(16)}")
+        if (fallback == ULTIUM_K73_ADDR && !manager.isUltiumMode) runCatching { manager.enableUltiumMode() }
         return fallback
     }
 
@@ -136,7 +164,17 @@ object GmVcimActivation {
         return try {
             val addrStr = if (manager.use29BitCan) "0x%02X".format(vcimAddress) else "0x${vcimAddress.toString(16)}"
 
-            // 1. Extended diagnostic session
+            // Ensure correct CAN mode before starting activation
+            if (vcimAddress == ULTIUM_K73_ADDR && !manager.isUltiumMode) manager.enableUltiumMode()
+
+            // 1. Extended diagnostic session — reset to DefaultSession first so the ECU transitions
+            //    cleanly (some ECUs, e.g. 0x80, refuse to re-enter ExtendedSession from a stale
+            //    session left open by findVcimAddress() without first going through DefaultSession).
+            try {
+                manager.sendUds(vcimAddress, byteArrayOf(SVC_DIAGNOSTIC_SESSION, SESSION_DEFAULT))
+                delay(500)
+            } catch (_: Exception) { delay(500) }
+
             val sessionResp = manager.sendUds(vcimAddress, byteArrayOf(SVC_DIAGNOSTIC_SESSION, SESSION_EXTENDED))
             val sessionOk = sessionResp.firstOrNull() == 0x50.toByte()
             stepLog += StepResult("ExtendedSession $addrStr", sessionOk,
@@ -562,6 +600,11 @@ object GmVcimActivation {
         manager: Obd2Manager, addr: Int, label: String,
         stepLog: MutableList<StepResult>
     ): Boolean {
+        // Reset to DefaultSession first — prevents ECU lockout state from blocking ExtendedSession
+        try {
+            manager.sendUds(addr, byteArrayOf(SVC_DIAGNOSTIC_SESSION, SESSION_DEFAULT))
+            delay(300)
+        } catch (_: Exception) { delay(300) }
         for (retry in 0..2) {
             try {
                 if (retry > 0) delay(800L * retry)
