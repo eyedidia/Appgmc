@@ -58,6 +58,9 @@ class Obd2ActivationFragment : Fragment() {
         binding.btnCopyExport.setOnClickListener {
             copyToClipboard(viewModel.buildExportText(lastExportableState))
         }
+        binding.btnTryDoip.setOnClickListener {
+            findNavController().navigate(R.id.action_obd2_to_doip)
+        }
         binding.btnAtSend.setOnClickListener {
             val cmd = binding.atInput.text?.toString() ?: return@setOnClickListener
             viewModel.sendAtCommand(cmd)
@@ -99,6 +102,7 @@ class Obd2ActivationFragment : Fragment() {
         binding.btnGoToPairing.visibility = View.GONE
         binding.btnCopyExport.visibility = View.GONE
         binding.btnShowAllBle.visibility = View.GONE
+        binding.btnTryDoip.visibility = View.GONE
 
         // Show AT terminal once we're past initialization
         val terminalVisible = state !is Obd2ActivationState.Idle &&
@@ -179,8 +183,9 @@ class Obd2ActivationFragment : Fragment() {
             }
             is Obd2ActivationState.UnsupportedModel -> {
                 binding.statusText.text =
-                    "VCIM did not recognize any of the BLE enable DIDs.\nTap 'Diagnostic Dump' to discover which DIDs this module exposes."
+                    "VCIM did not recognize any of the BLE enable DIDs.\nTap 'Diagnostic Dump' to discover which DIDs this module exposes.\n\nIf K73 isn't on the CAN bus, try DoIP via the vehicle Wi-Fi hotspot."
                 binding.btnRunDiagnostic.visibility = View.VISIBLE
+                binding.btnTryDoip.visibility = View.VISIBLE
             }
             is Obd2ActivationState.DiagnosticMode -> {
                 val vcimStr = "0x${state.vcimAddress.toString(16).uppercase()}"
@@ -204,6 +209,10 @@ class Obd2ActivationFragment : Fragment() {
                 binding.btnStartScan.isEnabled = state.recoverable
                 if (state.message.startsWith("No OBD2 adapter found")) {
                     binding.btnShowAllBle.visibility = View.VISIBLE
+                }
+                if (state.message.contains("VCIM", ignoreCase = true) ||
+                    state.message.contains("READY mode", ignoreCase = true)) {
+                    binding.btnTryDoip.visibility = View.VISIBLE
                 }
                 if (viewModel.obd2Manager.commandLog.isNotEmpty()) {
                     binding.btnCopyExport.text = "Copy Diagnostic Log"

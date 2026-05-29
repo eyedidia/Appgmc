@@ -22,7 +22,7 @@
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="OBD2 Activation"
+            android:text="DoIP Wi-Fi Activation"
             android:textColor="@color/text_primary"
             android:textSize="22sp"
             android:fontFamily="sans-serif-medium"
@@ -31,7 +31,7 @@
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="Bypass OnStar via the vehicle's OBD2 port. Works with ELM327 BLE adapters and Classic Bluetooth (paired) adapters."
+            android:text="Connect to the vehicle&#8217;s Wi-Fi hotspot, then tap Discover. The app tunnels UDS commands over DoIP (ISO 13400) directly to K73 VCIM via the Infotainment gateway."
             android:textColor="@color/text_secondary"
             android:textSize="14sp"
             android:layout_marginBottom="20dp" />
@@ -46,22 +46,22 @@
 
             <TextView android:id="@+id/step1Indicator"
                 android:layout_width="0dp" android:layout_height="wrap_content"
-                android:layout_weight="1" android:text="1\nFind"
+                android:layout_weight="1" android:text="1\nWi-Fi"
                 android:gravity="center" android:textColor="@color/text_hint" android:textSize="11sp" />
 
             <TextView android:id="@+id/step2Indicator"
                 android:layout_width="0dp" android:layout_height="wrap_content"
-                android:layout_weight="1" android:text="2\nInit"
+                android:layout_weight="1" android:text="2\nRoute"
                 android:gravity="center" android:textColor="@color/text_hint" android:textSize="11sp" />
 
             <TextView android:id="@+id/step3Indicator"
                 android:layout_width="0dp" android:layout_height="wrap_content"
-                android:layout_weight="1" android:text="3\nVIN"
+                android:layout_weight="1" android:text="3\nVCIM"
                 android:gravity="center" android:textColor="@color/text_hint" android:textSize="11sp" />
 
             <TextView android:id="@+id/step4Indicator"
                 android:layout_width="0dp" android:layout_height="wrap_content"
-                android:layout_weight="1" android:text="4\nActivate"
+                android:layout_weight="1" android:text="4\nBLE"
                 android:gravity="center" android:textColor="@color/text_hint" android:textSize="11sp" />
 
             <TextView android:id="@+id/step5Indicator"
@@ -99,44 +99,18 @@
                     android:layout_height="wrap_content"
                     android:textColor="@color/text_primary"
                     android:textSize="13sp"
-                    android:text="Plug your ELM327 OBD2 adapter into the OBD2 port, then tap Scan." />
+                    android:text="Connect your phone to the vehicle&#8217;s built-in Wi-Fi hotspot, then tap Discover Vehicle." />
 
             </LinearLayout>
         </com.google.android.material.card.MaterialCardView>
 
-        <!-- Discovered adapter list -->
-        <LinearLayout
-            android:id="@+id/adapters_container"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:orientation="vertical"
-            android:layout_marginBottom="12dp" />
-
-        <!-- Action buttons -->
+        <!-- Primary action button -->
         <com.google.android.material.button.MaterialButton
-            android:id="@+id/btn_start_scan"
+            android:id="@+id/btn_discover"
             style="@style/Widget.GMC.Button"
             android:layout_width="match_parent"
             android:layout_height="52dp"
-            android:text="Scan for OBD2 Adapter"
-            android:layout_marginBottom="8dp" />
-
-        <com.google.android.material.button.MaterialButton
-            android:id="@+id/btn_show_all_ble"
-            style="@style/Widget.GMC.Button.Outlined"
-            android:layout_width="match_parent"
-            android:layout_height="52dp"
-            android:text="Show all nearby Bluetooth devices"
-            android:visibility="gone"
-            android:layout_marginBottom="8dp" />
-
-        <com.google.android.material.button.MaterialButton
-            android:id="@+id/btn_proceed_vin_mismatch"
-            style="@style/Widget.GMC.Button.Outlined"
-            android:layout_width="match_parent"
-            android:layout_height="52dp"
-            android:text="Proceed Anyway (VIN mismatch)"
-            android:visibility="gone"
+            android:text="Discover Vehicle on Wi-Fi"
             android:layout_marginBottom="8dp" />
 
         <com.google.android.material.button.MaterialButton
@@ -163,15 +137,6 @@
             android:layout_width="match_parent"
             android:layout_height="52dp"
             android:text="Scan for Vehicle Now"
-            android:visibility="gone"
-            android:layout_marginBottom="8dp" />
-
-        <com.google.android.material.button.MaterialButton
-            android:id="@+id/btn_try_doip"
-            style="@style/Widget.GMC.Button.Outlined"
-            android:layout_width="match_parent"
-            android:layout_height="52dp"
-            android:text="Try via Vehicle Wi-Fi (DoIP)"
             android:visibility="gone"
             android:layout_marginBottom="16dp" />
 
@@ -208,7 +173,7 @@
             </LinearLayout>
         </com.google.android.material.card.MaterialCardView>
 
-        <!-- AT Command Terminal card (always visible when adapter connected) -->
+        <!-- UDS Terminal card (visible once connected) -->
         <com.google.android.material.card.MaterialCardView
             android:id="@+id/terminal_card"
             style="@style/Widget.GMC.Card"
@@ -228,13 +193,12 @@
                 <TextView
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:text="AT / OBD2 Terminal"
+                    android:text="UDS Terminal (DoIP)"
                     android:textColor="@color/gmc_red"
                     android:textSize="12sp"
                     android:fontFamily="sans-serif-medium"
                     android:layout_marginBottom="8dp" />
 
-                <!-- Terminal output (dynamically populated) -->
                 <LinearLayout
                     android:id="@+id/terminal_output"
                     android:layout_width="match_parent"
@@ -242,19 +206,20 @@
                     android:orientation="vertical"
                     android:layout_marginBottom="8dp" />
 
-                <!-- Command input row -->
+                <!-- Address + PDU input row -->
                 <LinearLayout
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:orientation="horizontal"
-                    android:gravity="center_vertical">
+                    android:gravity="center_vertical"
+                    android:layout_marginBottom="4dp">
 
                     <com.google.android.material.textfield.TextInputEditText
-                        android:id="@+id/at_input"
-                        android:layout_width="0dp"
+                        android:id="@+id/addr_input"
+                        android:layout_width="70dp"
                         android:layout_height="40dp"
-                        android:layout_weight="1"
-                        android:hint="e.g. ATDP, 0902, 22F190"
+                        android:hint="Addr"
+                        android:text="0045"
                         android:textColor="@color/text_primary"
                         android:textColorHint="@color/text_hint"
                         android:textSize="12sp"
@@ -264,10 +229,27 @@
                         android:background="@color/bg_elevated"
                         android:paddingStart="8dp"
                         android:paddingEnd="8dp"
-                        android:layout_marginEnd="8dp" />
+                        android:layout_marginEnd="6dp" />
+
+                    <com.google.android.material.textfield.TextInputEditText
+                        android:id="@+id/pdu_input"
+                        android:layout_width="0dp"
+                        android:layout_height="40dp"
+                        android:layout_weight="1"
+                        android:hint="PDU e.g. 22 F1 90"
+                        android:textColor="@color/text_primary"
+                        android:textColorHint="@color/text_hint"
+                        android:textSize="12sp"
+                        android:fontFamily="monospace"
+                        android:inputType="textCapCharacters"
+                        android:maxLines="1"
+                        android:background="@color/bg_elevated"
+                        android:paddingStart="8dp"
+                        android:paddingEnd="8dp"
+                        android:layout_marginEnd="6dp" />
 
                     <com.google.android.material.button.MaterialButton
-                        android:id="@+id/btn_at_send"
+                        android:id="@+id/btn_uds_send"
                         style="@style/Widget.GMC.Button.Outlined"
                         android:layout_width="wrap_content"
                         android:layout_height="40dp"
@@ -293,11 +275,11 @@
                 <TextView
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:text="Useful commands: ATDP (protocol), ATI (version), ATRV (voltage), 0902 (VIN), 10 03 (ext session), 22 F1 B0 (read DID)"
+                    android:text="Addr = logical ECU address (hex). PDU = UDS bytes. e.g. 0045 / 10 03 (ext session), 0045 / 22 F1 90 (VIN), 0045 / 27 01 (SA seed)"
                     android:textColor="@color/text_hint"
                     android:textSize="10sp"
                     android:fontFamily="monospace"
-                    android:layout_marginTop="6dp" />
+                    android:layout_marginTop="4dp" />
 
             </LinearLayout>
         </com.google.android.material.card.MaterialCardView>
@@ -305,7 +287,7 @@
         <TextView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="Works with ELM327 BLE (UUID FFF0/FFE0) and Classic Bluetooth adapters already paired in Android Settings. Search: 'ELM327 BLE v1.5' (~₪60)."
+            android:text="Requires the vehicle to be in READY or ACC mode. Connect to the vehicle&#8217;s built-in Wi-Fi (not your home router). DoIP uses TCP port 13400."
             android:textColor="@color/text_hint"
             android:textSize="11sp"
             android:gravity="center"

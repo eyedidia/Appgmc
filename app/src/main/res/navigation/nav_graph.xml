@@ -58,6 +58,23 @@
         <action
             android:id="@+id/action_obd2_to_vehicle_select"
             app:destination="@id/vehicleSelectFragment" />
+        <action
+            android:id="@+id/action_obd2_to_doip"
+            app:destination="@id/doipActivationFragment" />
+    </fragment>
+
+    <fragment
+        android:id="@+id/doipActivationFragment"
+        android:name="com.gmc.digitalkey.ui.activation.DoIpActivationFragment"
+        android:label="DoIP Wi-Fi Activation">
+        <argument
+            android:name="vehicleId"
+            app:argType="string"
+            app:nullable="true"
+            android:defaultValue="@null" />
+        <action
+            android:id="@+id/action_doip_to_vehicle_select"
+            app:destination="@id/vehicleSelectFragment" />
     </fragment>
 
 </navigation>
