@@ -411,7 +411,18 @@ class Obd2Manager(private val context: Context) {
         val hexCmd = pdu.joinToString(" ") { "%02X".format(it) }
         val response = sendCommand(hexCmd, 6_000)
         delay(200)  // let bus settle — prevents next ATH0/ATSH from timing out
-        return parseHexResponse(response)
+        return parseHexResponse(response).skipPending()
+    }
+
+    // Strip any number of NRC 0x78 (responseCorrectlyReceivedResponsePending) prefixes.
+    // ECU 0x80 on Sierra EV 2026 sends "7F 27 78" before the actual seed response in the same
+    // ELM327 multi-frame reply, causing the first byte to be 0x7F instead of 0x67.
+    private fun ByteArray.skipPending(): ByteArray {
+        var i = 0
+        while (i + 2 < size && this[i] == 0x7F.toByte() && this[i + 2] == 0x78.toByte()) {
+            i += 3
+        }
+        return if (i == 0) this else copyOfRange(i, size)
     }
 
     // Broadcast UDS to all ECUs (29-bit functional) and return list of responding ECU IDs
