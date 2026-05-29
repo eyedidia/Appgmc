@@ -52,9 +52,13 @@ class Obd2Manager(private val context: Context) {
         isUltiumMode = true
     }
 
-    // Restore 29-bit CAN (ATSP7) after Ultium probing
+    // Restore 29-bit CAN (ATSP7) after Ultium probing.
+    // ATCRA 652 set during Ultium mode persists across protocol switch on ELM327 v1.5 clones —
+    // it would silently block all 29-bit responses whose CAN ID doesn't match 0x652.
+    // Setting CAN mask to all-zeros disables the filter (frame_id & 0 == filter & 0 for any ID).
     suspend fun disableUltiumMode() {
-        sendCommand("ATSP7"); delay(300)
+        sendCommand("ATSP7"); delay(200)
+        runCatching { sendCommand("ATCM 00 00 00 00"); delay(100) }  // clear receive filter
         isUltiumMode = false
     }
 

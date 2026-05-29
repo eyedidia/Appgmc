@@ -57,39 +57,35 @@ object GmVcimActivation {
                 "ECU scan (29-bit broadcast 18DB33F1)", ids.isNotEmpty(),
                 if (ids.isEmpty()) "No ECUs responded" else "ECU IDs: ${ids.map { "0x%02X".format(it) }}"
             )
-            // Some ECUs (e.g. K73 VCIM at 0x45) don't respond to functional broadcasts
-            // but DO respond to physical addressing. Always probe known VCIM candidates directly.
+            // Some ECUs don't respond to functional broadcasts but DO respond to physical addressing.
+            // ECU 0x28: returns NRC 0x11 (SubFunctionNotSupported) on DefaultSession — try
+            // ExtendedSession directly (some GM modules reject 10 01 but accept 10 03).
             for (candidate in listOf(0x45, 0x28, 0x10, 0x7D)) {
                 if (candidate in ids) continue
                 try {
-                    val r = manager.sendUds(candidate, byteArrayOf(SVC_DIAGNOSTIC_SESSION, SESSION_DEFAULT))
+                    var r = manager.sendUds(candidate, byteArrayOf(SVC_DIAGNOSTIC_SESSION, SESSION_DEFAULT))
                     if (r.firstOrNull() == 0x50.toByte()) {
                         ids.add(candidate)
                         stepLog += StepResult("Direct probe 0x%02X".format(candidate), true,
-                            "Responded to physical addressing (not in broadcast)")
+                            "Responded to DefaultSession (not in broadcast)")
+                    } else if (r.getOrNull(2) == 0x11.toByte()) {
+                        // NRC 0x11 = SubFunctionNotSupported for DefaultSession — try ExtendedSession
+                        r = try { manager.sendUds(candidate, byteArrayOf(SVC_DIAGNOSTIC_SESSION, SESSION_EXTENDED)) }
+                            catch (_: Exception) { byteArrayOf() }
+                        if (r.firstOrNull() == 0x50.toByte()) {
+                            ids.add(candidate)
+                            stepLog += StepResult("Direct probe 0x%02X".format(candidate), true,
+                                "Responded to ExtendedSession (NRC 0x11 on DefaultSession)")
+                        }
                     }
                 } catch (_: Exception) { }
             }
-            // Probe Ultium K73 VCIM at 0x252 on 11-bit CAN (ATSP6).
-            // Silverado EV / Sierra EV / Hummer EV 2024+ route the VCIM through a separate
-            // 11-bit GMLAN segment not visible in 29-bit ATSP7 mode.
+            // Probe Ultium K73 VCIM at 0x252 on 11-bit CAN.
+            // Silverado EV / Sierra EV 2024+ route the VCIM through a sub-network not visible
+            // in 29-bit ATSP7 mode. Try ATSP6 (500kbaud) first, then ATSP5 (250kbaud / MSCAN).
             if (ULTIUM_K73_ADDR !in ids) {
-                try {
-                    manager.enableUltiumMode()
-                    val r = manager.sendUds(ULTIUM_K73_ADDR, byteArrayOf(SVC_DIAGNOSTIC_SESSION, SESSION_DEFAULT))
-                    if (r.firstOrNull() == 0x50.toByte()) {
-                        ids.add(ULTIUM_K73_ADDR)
-                        stepLog += StepResult("Ultium K73 VCIM (0x252)", true, "Found on 11-bit CAN (ATSP6)")
-                        // Leave Ultium mode enabled — VCIM is at 0x252 and all subsequent
-                        // sendUds(0x252, ...) calls need it.
-                    } else {
-                        manager.disableUltiumMode()
-                        stepLog += StepResult("Ultium K73 VCIM (0x252)", false, "No response on 11-bit CAN")
-                    }
-                } catch (e: Exception) {
-                    runCatching { manager.disableUltiumMode() }
-                    stepLog += StepResult("Ultium K73 VCIM (0x252)", false, e.message ?: "timeout")
-                }
+                val probeResult = probeUltiumVcim(manager, stepLog)
+                if (probeResult) ids.add(ULTIUM_K73_ADDR)
             }
             return ids
         }
@@ -151,8 +147,12 @@ object GmVcimActivation {
         }
 
         val fallback = if (manager.use29BitCan) ULTIUM_K73_ADDR else 0x7E3
-        stepLog += StepResult("VCIM address", false,
-            "Not identified — using fallback 0x${fallback.toString(16)}")
+        val detail = if (manager.use29BitCan)
+            "K73 VCIM not found on 29-bit or 11-bit CAN. On Silverado/Sierra EV, the VCIM " +
+            "may be behind the K56 Gateway (ECU 0x80) on an internal CAN FD or Ethernet bus " +
+            "not reachable via ELM327. A CAN FD adapter or DoIP (vehicle Ethernet) is needed."
+        else "Not identified — using fallback 0x${fallback.toString(16)}"
+        stepLog += StepResult("VCIM address", false, detail)
         if (fallback == ULTIUM_K73_ADDR && !manager.isUltiumMode) runCatching { manager.enableUltiumMode() }
         return fallback
     }
@@ -613,6 +613,41 @@ object GmVcimActivation {
             } catch (_: Exception) { }
         }
         stepLog += StepResult("SA re-open session ($label)", false, "ECU not responding after 3 retries")
+        return false
+    }
+
+    // --- Ultium VCIM Probe ---
+
+    // Probes K73 VCIM at 0x252 using both 500kbaud (ATSP6) and 250kbaud (ATSP5) 11-bit CAN.
+    // Returns true if found and leaves isUltiumMode=true. Returns false and restores 29-bit.
+    private suspend fun probeUltiumVcim(manager: Obd2Manager, stepLog: MutableList<StepResult>): Boolean {
+        // enableUltiumMode() sets isUltiumMode=true so sendUds(0x252,...) uses "ATSH 252" format
+        try {
+            manager.enableUltiumMode()
+            val r = manager.sendUds(ULTIUM_K73_ADDR, byteArrayOf(SVC_DIAGNOSTIC_SESSION, SESSION_DEFAULT))
+            if (r.firstOrNull() == 0x50.toByte()) {
+                stepLog += StepResult("Ultium K73 VCIM (0x252)", true, "Found on 11-bit CAN 500kbaud (ATSP6)")
+                return true
+            }
+            stepLog += StepResult("Ultium K73 VCIM (0x252) ATSP6", false, "No response at 500kbaud")
+        } catch (e: Exception) {
+            stepLog += StepResult("Ultium K73 VCIM (0x252) ATSP6", false, e.message ?: "timeout")
+        }
+        // Try ATSP5 (11-bit 250kbaud) — K73 might be on MSCAN rather than HSCAN
+        try {
+            manager.sendCommand("ATSP5"); delay(300)
+            manager.sendCommand("ATCRA 652"); delay(100)
+            // isUltiumMode already true — sendUds uses correct 11-bit ATSH format
+            val r = manager.sendUds(ULTIUM_K73_ADDR, byteArrayOf(SVC_DIAGNOSTIC_SESSION, SESSION_DEFAULT))
+            if (r.firstOrNull() == 0x50.toByte()) {
+                stepLog += StepResult("Ultium K73 VCIM (0x252)", true, "Found on 11-bit CAN 250kbaud (ATSP5)")
+                return true
+            }
+            stepLog += StepResult("Ultium K73 VCIM (0x252) ATSP5", false, "No response at 250kbaud")
+        } catch (e: Exception) {
+            stepLog += StepResult("Ultium K73 VCIM (0x252) ATSP5", false, e.message ?: "timeout")
+        }
+        runCatching { manager.disableUltiumMode() }
         return false
     }
 
