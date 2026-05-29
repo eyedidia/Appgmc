@@ -31,6 +31,9 @@ object GmVcimActivation {
         byteArrayOf(0xF1.toByte(), 0xC0.toByte()), // Connected Services feature flags
         byteArrayOf(0xF1.toByte(), 0xC1.toByte()), // Connected Services feature flags 2
         byteArrayOf(0x02.toByte(), 0x1C.toByte()), // GM BLE pairing enable (Ultium alt)
+        byteArrayOf(0xF1.toByte(), 0x80.toByte()), // ECU serial / Radio feature config
+        byteArrayOf(0xF1.toByte(), 0xD0.toByte()), // Digital key feature flag
+        byteArrayOf(0x02.toByte(), 0x00.toByte()), // Module status bytes
     )
     private val DID_BLE_ENABLE_VALUE = byteArrayOf(0x01)
 
@@ -57,28 +60,36 @@ object GmVcimActivation {
                 "ECU scan (29-bit broadcast 18DB33F1)", ids.isNotEmpty(),
                 if (ids.isEmpty()) "No ECUs responded" else "ECU IDs: ${ids.map { "0x%02X".format(it) }}"
             )
-            // Some ECUs don't respond to functional broadcasts but DO respond to physical addressing.
-            // ECU 0x28: returns NRC 0x11 (SubFunctionNotSupported) on DefaultSession — try
-            // ExtendedSession directly (some GM modules reject 10 01 but accept 10 03).
-            for (candidate in listOf(0x45, 0x28, 0x10, 0x7D)) {
+            // Probe known GM connectivity/VCIM addresses + broad sweep of 0x15–0x20 and
+            // 0x40–0x50. On 2026+ Ultium, K73 may sit at a different address than 0x45.
+            // ECU 0x28: returns NRC 0x11 on DefaultSession → retry with ExtendedSession.
+            val directCandidates = buildList {
+                addAll(listOf(0x45, 0x28, 0x10, 0x7D))          // known specific candidates
+                addAll(0x40..0x50)                               // K73 range on Ultium 2026+
+                addAll(listOf(0x15, 0x16, 0x17, 0x19, 0x1D, 0x20)) // seen in earlier vehicle scan
+            }.distinct()
+            val broadFound = mutableListOf<Int>()
+            for (candidate in directCandidates) {
                 if (candidate in ids) continue
                 try {
                     var r = manager.sendUds(candidate, byteArrayOf(SVC_DIAGNOSTIC_SESSION, SESSION_DEFAULT))
                     if (r.firstOrNull() == 0x50.toByte()) {
                         ids.add(candidate)
-                        stepLog += StepResult("Direct probe 0x%02X".format(candidate), true,
-                            "Responded to DefaultSession (not in broadcast)")
+                        broadFound.add(candidate)
                     } else if (r.getOrNull(2) == 0x11.toByte()) {
                         // NRC 0x11 = SubFunctionNotSupported for DefaultSession — try ExtendedSession
                         r = try { manager.sendUds(candidate, byteArrayOf(SVC_DIAGNOSTIC_SESSION, SESSION_EXTENDED)) }
                             catch (_: Exception) { byteArrayOf() }
                         if (r.firstOrNull() == 0x50.toByte()) {
                             ids.add(candidate)
-                            stepLog += StepResult("Direct probe 0x%02X".format(candidate), true,
-                                "Responded to ExtendedSession (NRC 0x11 on DefaultSession)")
+                            broadFound.add(candidate)
                         }
                     }
                 } catch (_: Exception) { }
+            }
+            if (broadFound.isNotEmpty()) {
+                stepLog += StepResult("Broad probe (0x40–0x50 + known)", true,
+                    "Found: ${broadFound.map { "0x%02X".format(it) }}")
             }
             // Probe Ultium K73 VCIM at 0x252 on 11-bit CAN.
             // Silverado EV / Sierra EV 2024+ route the VCIM through a sub-network not visible
@@ -148,9 +159,9 @@ object GmVcimActivation {
 
         val fallback = if (manager.use29BitCan) ULTIUM_K73_ADDR else 0x7E3
         val detail = if (manager.use29BitCan)
-            "K73 VCIM not found on 29-bit or 11-bit CAN. On Silverado/Sierra EV, the VCIM " +
-            "may be behind the K56 Gateway (ECU 0x80) on an internal CAN FD or Ethernet bus " +
-            "not reachable via ELM327. A CAN FD adapter or DoIP (vehicle Ethernet) is needed."
+            "K73 VCIM not found. Ensure vehicle is in READY or ACC mode (not just powered on) — " +
+            "EVs have no ignition key; READY mode activates all CAN modules. If already in READY " +
+            "mode, K73 may be at a different 29-bit address on this VIN."
         else "Not identified — using fallback 0x${fallback.toString(16)}"
         stepLog += StepResult("VCIM address", false, detail)
         if (fallback == ULTIUM_K73_ADDR && !manager.isUltiumMode) runCatching { manager.enableUltiumMode() }
