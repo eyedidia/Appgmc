@@ -154,9 +154,12 @@ class Obd2ActivationFragment : Fragment() {
                 binding.btnStartScan.isEnabled = false
             }
             is Obd2ActivationState.ActivationSuccess -> {
-                binding.statusText.text =
-                    "BLE digital key activated on VCIM 0x${state.vcimAddress.toString(16).uppercase()}!\n\n" +
-                    "You can now remove the OBD2 adapter and scan for your vehicle."
+                val vehicleLine = state.vinInfo?.let { "${it.year} ${it.make} ${it.model}" }
+                binding.statusText.text = buildString {
+                    if (vehicleLine != null) appendLine("Vehicle: $vehicleLine\n")
+                    append("BLE digital key activated on VCIM 0x${state.vcimAddress.toString(16).uppercase()}!\n\n")
+                    append("You can now remove the OBD2 adapter and scan for your vehicle.")
+                }
                 binding.btnStartScan.visibility = View.GONE
                 binding.btnGoToPairing.visibility = View.VISIBLE
                 lastExportableState = state

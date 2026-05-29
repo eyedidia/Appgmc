@@ -328,10 +328,24 @@ class Obd2Manager(private val context: Context) {
         }
         val response = sendCommand("0902", 6_000)
         if (use29BitCan) sendCommand("ATH1")  // restore headers for ECU discovery
-        parseVin(response)
+        parseVin(response) ?: if (use29BitCan) readVinViaDid() else null
     } catch (e: Exception) {
         if (use29BitCan) runCatching { sendCommand("ATH1") }
         null
+    }
+
+    private suspend fun readVinViaDid(): String? {
+        for (addr in listOf(0x45, 0x80, 0x28)) {
+            try {
+                val r = sendUds(addr, byteArrayOf(0x22, 0xF1.toByte(), 0x90.toByte()))
+                if (r.firstOrNull() == 0x62.toByte() && r.size >= 20) {
+                    val vin = String(r.drop(3).toByteArray(), Charsets.US_ASCII)
+                        .filter { it.isLetterOrDigit() }.take(17)
+                    if (vin.length == 17) return vin
+                }
+            } catch (_: Exception) { }
+        }
+        return null
     }
 
     private fun parseVin(raw: String): String? {

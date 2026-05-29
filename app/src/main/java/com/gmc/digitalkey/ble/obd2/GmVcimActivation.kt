@@ -1,6 +1,7 @@
 package com.gmc.digitalkey.ble.obd2
 
 import android.util.Log
+import kotlinx.coroutines.delay
 
 object GmVcimActivation {
 
@@ -50,11 +51,24 @@ object GmVcimActivation {
     suspend fun discoverEcus(manager: Obd2Manager,
                              stepLog: MutableList<StepResult> = mutableListOf()): List<Int> {
         if (manager.use29BitCan) {
-            val ids = manager.discoverEcuIds29Bit()
+            val ids = manager.discoverEcuIds29Bit().toMutableList()
             stepLog += StepResult(
                 "ECU scan (29-bit broadcast 18DB33F1)", ids.isNotEmpty(),
                 if (ids.isEmpty()) "No ECUs responded" else "ECU IDs: ${ids.map { "0x%02X".format(it) }}"
             )
+            // Some ECUs (e.g. K73 VCIM at 0x45) don't respond to functional broadcasts
+            // but DO respond to physical addressing. Always probe known VCIM candidates directly.
+            for (candidate in listOf(0x45, 0x28, 0x10, 0x7D)) {
+                if (candidate in ids) continue
+                try {
+                    val r = manager.sendUds(candidate, byteArrayOf(SVC_DIAGNOSTIC_SESSION, SESSION_DEFAULT))
+                    if (r.firstOrNull() == 0x50.toByte()) {
+                        ids.add(candidate)
+                        stepLog += StepResult("Direct probe 0x%02X".format(candidate), true,
+                            "Responded to physical addressing (not in broadcast)")
+                    }
+                } catch (_: Exception) { }
+            }
             return ids
         }
         val found = mutableListOf<Int>()
@@ -133,6 +147,9 @@ object GmVcimActivation {
                     "VCIM $addrStr rejected extended session.\n\nEnsure vehicle ignition is ON.")
             }
 
+            // Identify the ECU so we know whether we're talking to the VCIM or another module
+            stepLog += StepResult("ECU $addrStr identity", true, identifyEcu(manager, vcimAddress))
+
             // 2. Probe F1A0 only — all other DIDs return NRC 0x31 (not supported) on VCIM 0x45.
             //    A single write attempt tells us whether SecurityAccess is needed without
             //    wasting time on unsupported DIDs that risk timeouts (especially F1C1).
@@ -195,6 +212,7 @@ object GmVcimActivation {
                 } catch (e: Exception) {
                     stepLog += StepResult("RoutineControl $label (pre-SA)", false, "Timeout: ${e.message}")
                 }
+                delay(400)  // let ECU recover between failed routine attempts to avoid lockout
             }
 
             // 3. SecurityAccess — request a FRESH seed before every key attempt.
@@ -219,12 +237,21 @@ object GmVcimActivation {
                 },
             )
 
+            // Let ECU recover after RoutineControl failures before attempting SecurityAccess
+            delay(1_500)
+
             for ((algName, algFn) in keyAlgorithmsL1) {
-                // Re-open extended session (may have timed out between attempts)
-                manager.sendUds(vcimAddress, byteArrayOf(SVC_DIAGNOSTIC_SESSION, SESSION_EXTENDED))
+                // Re-open extended session with retry — after RoutineControl failures the ECU
+                // may stop responding temporarily; retry up to 3x with increasing delay.
+                if (!reopenSession(manager, vcimAddress, algName, stepLog)) continue
 
                 // Request a fresh seed — CRITICAL: each attempt needs its own seed
-                val seedR = manager.sendUds(vcimAddress, byteArrayOf(SVC_SECURITY_ACCESS, SEC_SEED_L1))
+                val seedR = try {
+                    manager.sendUds(vcimAddress, byteArrayOf(SVC_SECURITY_ACCESS, SEC_SEED_L1))
+                } catch (e: Exception) {
+                    stepLog += StepResult("SecurityAccess L1 seed ($algName)", false, "Timeout: ${e.message}")
+                    continue
+                }
                 if (seedR.firstOrNull() != 0x67.toByte() || seedR.size < 3) {
                     stepLog += StepResult("SecurityAccess L1 seed ($algName)", false,
                         if (seedR.isEmpty()) "No response" else seedR.toHex())
@@ -278,9 +305,13 @@ object GmVcimActivation {
                     "32B-XOR-A5" to { seed: ByteArray -> seed.map { (it.toInt() xor 0xA5 and 0xFF).toByte() }.toByteArray() },
                 )
                 for ((algName, algFn) in keyAlgorithmsL2) {
-                    manager.sendUds(vcimAddress, byteArrayOf(SVC_DIAGNOSTIC_SESSION, SESSION_EXTENDED))
-                    val seedR = manager.sendUds(vcimAddress,
-                        byteArrayOf(SVC_SECURITY_ACCESS, 0x03.toByte()))
+                    if (!reopenSession(manager, vcimAddress, "L2-$algName", stepLog)) continue
+                    val seedR = try {
+                        manager.sendUds(vcimAddress, byteArrayOf(SVC_SECURITY_ACCESS, 0x03.toByte()))
+                    } catch (e: Exception) {
+                        stepLog += StepResult("SecurityAccess L2 seed ($algName)", false, "Timeout: ${e.message}")
+                        continue
+                    }
                     if (seedR.firstOrNull() != 0x67.toByte() || seedR.size < 3) {
                         val nrcByte = seedR.getOrNull(2)
                         if (nrcByte == 0x12.toByte() || nrcByte == 0x31.toByte()) {
@@ -340,8 +371,13 @@ object GmVcimActivation {
                 )
 
                 for ((algName, algFn) in keyAlgorithmsL3) {
-                    manager.sendUds(vcimAddress, byteArrayOf(SVC_DIAGNOSTIC_SESSION, SESSION_EXTENDED))
-                    val seedR = manager.sendUds(vcimAddress, byteArrayOf(SVC_SECURITY_ACCESS, SEC_SEED_L3))
+                    if (!reopenSession(manager, vcimAddress, "L3-$algName", stepLog)) continue
+                    val seedR = try {
+                        manager.sendUds(vcimAddress, byteArrayOf(SVC_SECURITY_ACCESS, SEC_SEED_L3))
+                    } catch (e: Exception) {
+                        stepLog += StepResult("SecurityAccess L3 seed ($algName)", false, "Timeout: ${e.message}")
+                        continue
+                    }
                     if (seedR.firstOrNull() != 0x67.toByte() || seedR.size < 3) {
                         // NRC 0x12 = subFunction not supported → L3 not available on this module
                         val nrcByte = seedR.getOrNull(2)
@@ -516,6 +552,49 @@ object GmVcimActivation {
         stepLog += StepResult("DID discovery", results.isNotEmpty(),
             "${results.size}/${probeList.size} DIDs readable")
         return results
+    }
+
+    // --- Session Retry Helper ---
+
+    // Re-opens extended session before each SA attempt; returns false if ECU doesn't respond
+    // after 3 retries (ECU is in lockout/cooldown after RoutineControl failures).
+    private suspend fun reopenSession(
+        manager: Obd2Manager, addr: Int, label: String,
+        stepLog: MutableList<StepResult>
+    ): Boolean {
+        for (retry in 0..2) {
+            try {
+                if (retry > 0) delay(800L * retry)
+                val r = manager.sendUds(addr, byteArrayOf(SVC_DIAGNOSTIC_SESSION, SESSION_EXTENDED))
+                if (r.firstOrNull() == 0x50.toByte()) return true
+            } catch (_: Exception) { }
+        }
+        stepLog += StepResult("SA re-open session ($label)", false, "ECU not responding after 3 retries")
+        return false
+    }
+
+    // --- ECU Identification ---
+
+    // Reads F18A (ECU system name) to identify what module we're talking to.
+    private suspend fun identifyEcu(manager: Obd2Manager, addr: Int): String {
+        val nameR = try {
+            manager.sendUds(addr, byteArrayOf(SVC_READ_DATA_BY_ID, 0xF1.toByte(), 0x8A.toByte()))
+        } catch (_: Exception) { byteArrayOf() }
+        val name = if (nameR.firstOrNull() == 0x62.toByte() && nameR.size > 3)
+            nameR.drop(3).toByteArray().toString(Charsets.US_ASCII).filter { it.isLetterOrDigit() || it == ' ' || it == '_' || it == '-' }.trim()
+        else null
+
+        val swR = try {
+            manager.sendUds(addr, byteArrayOf(SVC_READ_DATA_BY_ID, 0xF1.toByte(), 0x8B.toByte()))
+        } catch (_: Exception) { byteArrayOf() }
+        val sw = if (swR.firstOrNull() == 0x62.toByte() && swR.size > 3)
+            swR.drop(3).toByteArray().toString(Charsets.US_ASCII).filter { it.isLetterOrDigit() || it == '.' || it == ' ' }.trim()
+        else null
+
+        return listOfNotNull(
+            name?.takeIf { it.isNotBlank() }?.let { "Name: $it" },
+            sw?.takeIf { it.isNotBlank() }?.let { "SW: $it" }
+        ).joinToString(", ").ifEmpty { "F18A/F18B not readable — may not be VCIM" }
     }
 
     // --- SecurityAccess Key Computation ---

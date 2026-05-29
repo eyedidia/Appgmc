@@ -9,6 +9,8 @@ import com.gmc.digitalkey.ble.obd2.GmVcimActivation
 import com.gmc.digitalkey.ble.obd2.Obd2Manager
 import com.gmc.digitalkey.ble.obd2.Obd2State
 import com.gmc.digitalkey.db.AppDatabase
+import com.gmc.digitalkey.vin.VinDecoder
+import com.gmc.digitalkey.vin.VinInfo
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -26,7 +28,7 @@ sealed class Obd2ActivationState {
     object DiscoveringEcus : Obd2ActivationState()
     data class VinMismatch(val fromObd: String, val storedVin: String) : Obd2ActivationState()
     object ActivatingBle : Obd2ActivationState()
-    data class ActivationSuccess(val vcimAddress: Int) : Obd2ActivationState()
+    data class ActivationSuccess(val vcimAddress: Int, val vinInfo: VinInfo? = null) : Obd2ActivationState()
     data class ActivationError(val message: String, val recoverable: Boolean = true) : Obd2ActivationState()
     data class NeedsSecurityKey(val vcimAddress: Int, val seed: ByteArray) : Obd2ActivationState()
     object UnsupportedModel : Obd2ActivationState()
@@ -64,6 +66,7 @@ class Obd2ActivationViewModel(app: Application) : AndroidViewModel(app) {
     private var storedVin: String = ""
     private var vehicleId: String = ""
     private var discoveredVcimAddress: Int = 0x7E3
+    private var pendingVinInfo: VinInfo? = null
 
     fun loadVehicleVin(id: String) {
         vehicleId = id
@@ -164,6 +167,9 @@ class Obd2ActivationViewModel(app: Application) : AndroidViewModel(app) {
 
         _uiState.value = Obd2ActivationState.ReadingVin
         val obdVin = obd2Manager.readVin()
+        pendingVinInfo = if (obdVin != null) {
+            try { VinDecoder.decode(obdVin) } catch (_: Exception) { null }
+        } else null
         if (obdVin != null && storedVin.length == 17 && !obdVin.equals(storedVin, ignoreCase = true)) {
             _uiState.value = Obd2ActivationState.VinMismatch(obdVin, storedVin)
             return
@@ -204,7 +210,7 @@ class Obd2ActivationViewModel(app: Application) : AndroidViewModel(app) {
                         db.vehicleDao().update(it.copy(activationMethod = "obd2"))
                     }
                 }
-                _uiState.value = Obd2ActivationState.ActivationSuccess(result.vcimAddress)
+                _uiState.value = Obd2ActivationState.ActivationSuccess(result.vcimAddress, pendingVinInfo)
             }
             is GmVcimActivation.ActivationResult.NeedsSecurityKey -> {
                 emitStepLog()
