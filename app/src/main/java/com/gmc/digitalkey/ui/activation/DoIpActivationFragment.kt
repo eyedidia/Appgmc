@@ -78,11 +78,8 @@ class DoIpActivationFragment : Fragment() {
         binding.btnGoToPairing.visibility = View.GONE
         binding.btnCopyExport.visibility = View.GONE
 
-        val terminalVisible = state !is DoIpActivationState.Idle &&
-            state !is DoIpActivationState.Scanning &&
-            state !is DoIpActivationState.VehicleFound &&
-            state !is DoIpActivationState.Connecting &&
-            state !is DoIpActivationState.ActivationError
+        // Show terminal as soon as there's anything to log — including during scan and on error
+        val terminalVisible = state !is DoIpActivationState.Idle
         binding.terminalCard.visibility = if (terminalVisible) View.VISIBLE else View.GONE
 
         when (state) {
@@ -169,7 +166,7 @@ class DoIpActivationFragment : Fragment() {
     private fun renderTerminalLog(log: List<Pair<String, String>>) {
         binding.terminalOutput.removeAllViews()
         if (log.isEmpty()) return
-        log.takeLast(25).forEach { (cmd, resp) ->
+        log.takeLast(60).forEach { (cmd, resp) ->
             binding.terminalOutput.addView(TextView(requireContext()).apply {
                 text = "> $cmd"
                 setTextColor(requireContext().getColor(R.color.gmc_red))

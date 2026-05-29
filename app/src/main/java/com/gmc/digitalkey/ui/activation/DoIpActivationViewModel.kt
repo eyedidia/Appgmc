@@ -49,13 +49,21 @@ class DoIpActivationViewModel(app: Application) : AndroidViewModel(app) {
 
     fun startDiscovery() {
         activeStepLog.clear()
+        doIpManager.commandLog.clear()
         viewModelScope.launch {
             _uiState.value = DoIpActivationState.Scanning
 
-            val gateway = doIpManager.getGatewayIp()
-            val gwNote = if (gateway != null) "Gateway: $gateway" else "No Wi-Fi gateway detected"
+            // Show network info before discovery starts
+            val netInfo = doIpManager.getLocalNetworkInfo()
+            val netNote = if (netInfo != null)
+                "local=${netInfo.first}  gw=${netInfo.second}  /${netInfo.third}"
+            else "No Wi-Fi connection detected"
+            activeStepLog += GmVcimActivation.StepResult("Network", netInfo != null, netNote)
+            emitLogs()
 
             val found = doIpManager.discoverVehicle()
+            emitLogs()  // show full probe log after discovery
+
             when (found) {
                 is DoIpManager.DiscoveryResult.Found -> {
                     vehicleIp = found.ip
@@ -65,10 +73,10 @@ class DoIpActivationViewModel(app: Application) : AndroidViewModel(app) {
                     connectAndActivate(found.ip, found.vin)
                 }
                 DoIpManager.DiscoveryResult.NotFound -> {
-                    activeStepLog += GmVcimActivation.StepResult("DoIP discovery", false, gwNote)
+                    activeStepLog += GmVcimActivation.StepResult("DoIP discovery", false, "TCP:13400 closed on all scanned IPs")
                     emitLogs()
                     _uiState.value = DoIpActivationState.ActivationError(
-                        "No vehicle found on Wi-Fi.\n\n$gwNote\n\nMake sure the phone is connected to the vehicle's Wi-Fi hotspot (not your home router), and the vehicle is in READY or ACC mode.",
+                        "No vehicle found on Wi-Fi.\n\n$netNote\n\nCheck the log below for details. Make sure the phone is connected to the vehicle's Wi-Fi hotspot (not your home router), and the vehicle is in READY or ACC mode.",
                         recoverable = true
                     )
                 }
@@ -270,7 +278,7 @@ class DoIpActivationViewModel(app: Application) : AndroidViewModel(app) {
         _stepLog.value = emptyList()
     }
 
-    private fun emitLogs() {
+    fun emitLogs() {
         _stepLog.value = activeStepLog.toList()
         _terminalLog.value = doIpManager.commandLog.toList()
     }

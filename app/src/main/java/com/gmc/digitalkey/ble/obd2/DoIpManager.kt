@@ -3,6 +3,9 @@ package com.gmc.digitalkey.ble.obd2
 import android.content.Context
 import android.net.ConnectivityManager
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -15,6 +18,7 @@ import java.net.DatagramSocket
 import java.net.InetAddress
 import java.net.InetSocketAddress
 import java.net.Socket
+import java.net.Inet4Address
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 
@@ -65,12 +69,21 @@ class DoIpManager(private val context: Context) {
 
     val commandLog = mutableListOf<Pair<String, String>>()
 
-    // Get the default route gateway — works with ACCESS_NETWORK_STATE (already declared)
     fun getGatewayIp(): String? {
         val cm = context.getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager ?: return null
         val network = cm.activeNetwork ?: return null
         val lp = cm.getLinkProperties(network) ?: return null
         return lp.routes.firstOrNull { it.isDefaultRoute && it.gateway != null }?.gateway?.hostAddress
+    }
+
+    // Returns the phone's local IPv4 + prefix length (e.g. "10.2.114.100" / 24)
+    fun getLocalNetworkInfo(): Triple<String, String, Int>? {
+        val cm = context.getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager ?: return null
+        val network = cm.activeNetwork ?: return null
+        val lp = cm.getLinkProperties(network) ?: return null
+        val la = lp.linkAddresses.firstOrNull { it.address is Inet4Address } ?: return null
+        val gateway = lp.routes.firstOrNull { it.isDefaultRoute && it.gateway != null }?.gateway?.hostAddress ?: "?"
+        return Triple(la.address.hostAddress ?: "?", gateway, la.prefixLength)
     }
 
     private fun frame(type: Int, payload: ByteArray): ByteArray {
@@ -86,54 +99,109 @@ class DoIpManager(private val context: Context) {
     suspend fun discoverVehicle(): DiscoveryResult = withContext(Dispatchers.IO) {
         _state.value = DoIpState.Scanning
 
-        val gateway = getGatewayIp()
-        val candidateIps = buildList {
-            if (gateway != null) add(gateway)
-            addAll(listOf("192.168.43.1", "192.168.1.1", "10.0.0.1", "172.20.10.1", "192.168.0.1"))
-        }.distinct()
+        val netInfo = getLocalNetworkInfo()
+        val localIp  = netInfo?.first  ?: "unknown"
+        val gateway  = netInfo?.second ?: "unknown"
+        val prefix   = netInfo?.third  ?: 24
+        commandLog.add("Network info" to "local=$localIp  gw=$gateway  /$prefix")
 
         val reqFrame = frame(TYPE_VEHICLE_ID_REQ, byteArrayOf())
 
-        // Phase 1: UDP broadcast + direct unicast probes
+        // Phase 1 — UDP broadcast + unicast VehicleIdentificationRequest
+        commandLog.add("UDP:$DOIP_PORT broadcast" to "sending VehicleIdentificationRequest (0x0001)…")
+        var udpFound: DiscoveryResult.Found? = null
         try {
             val udp = DatagramSocket()
             udp.broadcast = true
-            udp.soTimeout = 2500
-
+            udp.soTimeout = 2000
             runCatching {
-                val bcast = InetAddress.getByName("255.255.255.255")
-                udp.send(DatagramPacket(reqFrame, reqFrame.size, bcast, DOIP_PORT))
+                udp.send(DatagramPacket(reqFrame, reqFrame.size, InetAddress.getByName("255.255.255.255"), DOIP_PORT))
             }
-            candidateIps.forEach { ip ->
-                runCatching {
-                    udp.send(DatagramPacket(reqFrame, reqFrame.size, InetAddress.getByName(ip), DOIP_PORT))
-                }
+            if (gateway != "unknown") runCatching {
+                udp.send(DatagramPacket(reqFrame, reqFrame.size, InetAddress.getByName(gateway), DOIP_PORT))
+                commandLog.add("UDP:$DOIP_PORT → $gateway" to "VehicleIdentificationRequest sent")
             }
-
-            // Collect up to 5 announcements
-            repeat(5) {
+            // Wait up to 2 s for announcements
+            repeat(6) {
                 try {
-                    val buf = ByteArray(512)
-                    val pkt = DatagramPacket(buf, buf.size)
+                    val buf = ByteArray(512); val pkt = DatagramPacket(buf, buf.size)
                     udp.receive(pkt)
-                    parseAnnouncement(pkt.data.copyOf(pkt.length), pkt.address.hostAddress ?: "")
-                        ?.let { udp.close(); return@withContext it }
+                    val from = pkt.address.hostAddress ?: ""
+                    val parsed = parseAnnouncement(pkt.data.copyOf(pkt.length), from)
+                    if (parsed != null) {
+                        commandLog.add("UDP:$DOIP_PORT ← $from" to "VehicleAnnouncement ✓  VIN=${parsed.vin ?: "?"} logAddr=0x%04X".format(parsed.logicalAddress))
+                        udpFound = parsed
+                    } else {
+                        commandLog.add("UDP:$DOIP_PORT ← $from" to "response: ${pkt.data.take(pkt.length).joinToString(" ") { "%02X".format(it) }}")
+                    }
                 } catch (_: Exception) {}
             }
             udp.close()
-        } catch (_: Exception) {}
+        } catch (e: Exception) {
+            commandLog.add("UDP:$DOIP_PORT" to "error: ${e.message}")
+        }
+        udpFound?.let { return@withContext it }
 
-        // Phase 2: TCP connect probe — DoIP port open means vehicle is there even if UDP is blocked
-        for (ip in candidateIps) {
+        // Phase 2 — TCP probe: gateway + common IPs
+        val priorityCandidates = buildList {
+            if (gateway != "unknown") add(gateway)
+            addAll(listOf("192.168.43.1", "192.168.1.1", "10.0.0.1", "172.20.10.1", "192.168.0.1"))
+        }.distinct()
+
+        commandLog.add("TCP:$DOIP_PORT probe" to "trying ${priorityCandidates.size} priority IPs…")
+        for (ip in priorityCandidates) {
             try {
-                val s = Socket()
-                s.connect(InetSocketAddress(ip, DOIP_PORT), 1500)
-                s.close()
+                val s = Socket(); s.connect(InetSocketAddress(ip, DOIP_PORT), 600); s.close()
+                commandLog.add("TCP:$DOIP_PORT → $ip" to "OPEN ✓ — using this as DoIP server")
                 return@withContext DiscoveryResult.Found(ip, null, 0)
-            } catch (_: Exception) {}
+            } catch (_: Exception) {
+                commandLog.add("TCP:$DOIP_PORT → $ip" to "closed/timeout")
+            }
+        }
+
+        // Phase 3 — Parallel full-subnet scan (skips phone's own IP)
+        val subnetBase = computeSubnetBase(localIp, prefix)
+        if (subnetBase != null && prefix in 16..28) {
+            val hostCount = (1 shl (32 - prefix)) - 2
+            val scanCount = minOf(hostCount, 254)
+            commandLog.add("Subnet scan" to "$subnetBase.x/$prefix — scanning $scanCount hosts on TCP:$DOIP_PORT (300ms timeout)")
+            val openIps = coroutineScope {
+                (1..scanCount).map { i ->
+                    async(Dispatchers.IO) {
+                        val ip = "$subnetBase.$i"
+                        if (ip == localIp) return@async null
+                        try {
+                            val s = Socket(); s.connect(InetSocketAddress(ip, DOIP_PORT), 300); s.close()
+                            ip
+                        } catch (_: Exception) { null }
+                    }
+                }.awaitAll().filterNotNull()
+            }
+            if (openIps.isNotEmpty()) {
+                commandLog.add("Subnet scan result" to "DoIP port open on: ${openIps.joinToString(", ")}")
+                return@withContext DiscoveryResult.Found(openIps.first(), null, 0)
+            } else {
+                commandLog.add("Subnet scan result" to "TCP:$DOIP_PORT closed on all $scanCount hosts in $subnetBase.x/$prefix")
+            }
         }
 
         DiscoveryResult.NotFound
+    }
+
+    private fun computeSubnetBase(localIp: String, prefix: Int): String? {
+        val parts = localIp.split(".").mapNotNull { it.toIntOrNull() }
+        if (parts.size != 4) return null
+        val ipInt = (parts[0] shl 24) or (parts[1] shl 16) or (parts[2] shl 8) or parts[3]
+        val mask = if (prefix == 0) 0 else (-1 shl (32 - prefix))
+        val net = ipInt and mask
+        // Return the /24 base regardless of actual prefix — scanning /16+ takes too long
+        val base24 = if (prefix <= 24) {
+            val n = net ushr 8
+            "${(n shr 16) and 0xFF}.${(n shr 8) and 0xFF}.${n and 0xFF}"
+        } else {
+            "${parts[0]}.${parts[1]}.${parts[2]}"
+        }
+        return base24
     }
 
     private fun parseAnnouncement(data: ByteArray, ip: String): DiscoveryResult.Found? {
