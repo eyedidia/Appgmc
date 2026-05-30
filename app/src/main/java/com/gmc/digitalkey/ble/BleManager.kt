@@ -20,6 +20,7 @@ import java.util.UUID
 
 /** Full BLE advertisement record — used by raw discovery scan. */
 data class RawAdvert(
+    val device: BluetoothDevice,
     val address: String,
     val name: String?,
     val rssi: Int,
@@ -27,12 +28,23 @@ data class RawAdvert(
     val manufacturerData: Map<Int, ByteArray>,  // Bluetooth company ID → payload bytes
     val txPower: Int?,
 ) {
+    // GM's registered Bluetooth SIG company ID
+    val isGm: Boolean get() = 0x005D in manufacturerData
+
     fun serviceUuidsDisplay() =
         if (serviceUuids.isEmpty()) "—" else serviceUuids.joinToString("\n") { it.toString().uppercase() }
 
     fun manufacturerDisplay() = if (manufacturerData.isEmpty()) "—" else
         manufacturerData.entries.joinToString("\n") { (id, data) ->
-            "Company 0x%04X: %s".format(id, data.joinToString(" ") { "%02X".format(it) }.take(40))
+            val label = when (id) {
+                0x005D -> "General Motors"
+                0x004C -> "Apple"
+                0x0006 -> "Microsoft"
+                0x0075 -> "Samsung"
+                0x00E0 -> "Google"
+                else -> "0x%04X".format(id)
+            }
+            "$label: ${data.joinToString(" ") { "%02X".format(it) }.take(60)}"
         }
 }
 
@@ -171,6 +183,7 @@ class BleManager(private val context: Context) {
                 }
                 onFound(
                     RawAdvert(
+                        device = result.device,
                         address = result.device.address,
                         name = rec?.deviceName,
                         rssi = result.rssi,

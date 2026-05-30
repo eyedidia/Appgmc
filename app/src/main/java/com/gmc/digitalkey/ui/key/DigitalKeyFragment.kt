@@ -148,23 +148,34 @@ class DigitalKeyFragment : Fragment() {
             return
         }
         binding.tvRawDevicesLabel.visibility = View.VISIBLE
-        devices.forEach { advert ->
+
+        // GM vehicles first, then by RSSI
+        val sorted = devices.sortedWith(compareByDescending<RawAdvert> { it.isGm }.thenByDescending { it.rssi })
+
+        sorted.forEach { advert ->
+            val gmTag = if (advert.isGm) " ★ GM VEHICLE" else ""
+            val color = when {
+                advert.isGm                      -> requireContext().getColor(R.color.status_warning)
+                advert.serviceUuids.isNotEmpty() -> requireContext().getColor(R.color.status_connected)
+                else                             -> requireContext().getColor(R.color.text_secondary)
+            }
             val tv = android.widget.TextView(requireContext()).apply {
-                val hasUuid = advert.serviceUuids.isNotEmpty()
-                val hasMfr = advert.manufacturerData.isNotEmpty()
                 text = buildString {
-                    append("${advert.rssi} dBm  ${advert.address}")
+                    append("${advert.rssi} dBm  ${advert.address}$gmTag")
                     if (advert.name != null) append("  \"${advert.name}\"")
                     appendLine()
-                    if (hasUuid) appendLine("  UUIDs: ${advert.serviceUuidsDisplay()}")
-                    if (hasMfr) append("  Mfr: ${advert.manufacturerDisplay()}")
+                    if (advert.serviceUuids.isNotEmpty()) appendLine("  UUIDs: ${advert.serviceUuidsDisplay()}")
+                    if (advert.manufacturerData.isNotEmpty()) appendLine("  Mfr: ${advert.manufacturerDisplay()}")
+                    if (advert.isGm) append("  ↑ TAP to GATT dump")
                 }
                 textSize = 10f
                 typeface = Typeface.MONOSPACE
-                setTextColor(
-                    requireContext().getColor(if (hasUuid) R.color.status_connected else R.color.text_secondary)
-                )
+                setTextColor(color)
                 setPadding(0, 8, 0, 8)
+                isClickable = true
+                isFocusable = true
+                // Tap any device → GATT dump (most useful during pairing window)
+                setOnClickListener { viewModel.dumpVehicleGatt(advert.device) }
             }
             val divider = View(requireContext()).apply {
                 setBackgroundColor(requireContext().getColor(R.color.bg_surface))
