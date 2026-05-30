@@ -114,6 +114,14 @@
             android:layout_marginBottom="8dp" />
 
         <com.google.android.material.button.MaterialButton
+            android:id="@+id/btn_scan_network"
+            style="@style/Widget.GMC.Button.Outlined"
+            android:layout_width="match_parent"
+            android:layout_height="52dp"
+            android:text="Scan Network (ports 13400, 5555, 80…)"
+            android:layout_marginBottom="8dp" />
+
+        <com.google.android.material.button.MaterialButton
             android:id="@+id/btn_run_diagnostic"
             style="@style/Widget.GMC.Button.Outlined"
             android:layout_width="match_parent"

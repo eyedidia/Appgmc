@@ -39,6 +39,7 @@ class DoIpActivationFragment : Fragment() {
         arguments?.getString("vehicleId")?.let { viewModel.loadVehicleId(it) }
 
         binding.btnDiscover.setOnClickListener { viewModel.startDiscovery() }
+        binding.btnScanNetwork.setOnClickListener { viewModel.scanNetwork() }
         binding.btnRunDiagnostic.setOnClickListener { viewModel.runDiagnosticDumpPublic() }
         binding.btnCopyExport.setOnClickListener { copyToClipboard(viewModel.buildExportText(lastExportableState)) }
         binding.btnGoToPairing.setOnClickListener { findNavController().navigate(R.id.vehicleSelectFragment) }
@@ -74,6 +75,7 @@ class DoIpActivationFragment : Fragment() {
 
         binding.progressBar.visibility = View.GONE
         binding.btnDiscover.isEnabled = true
+        binding.btnScanNetwork.isEnabled = true
         binding.btnRunDiagnostic.visibility = View.GONE
         binding.btnGoToPairing.visibility = View.GONE
         binding.btnCopyExport.visibility = View.GONE
@@ -90,9 +92,10 @@ class DoIpActivationFragment : Fragment() {
                     "3. Tap Discover Vehicle."
             }
             is DoIpActivationState.Scanning -> {
-                binding.statusText.text = "Probing vehicle on Wi-Fi network (UDP:13400 + TCP:13400)…"
+                binding.statusText.text = "Scanning Wi-Fi network… check the log below for live results."
                 binding.progressBar.visibility = View.VISIBLE
                 binding.btnDiscover.isEnabled = false
+                binding.btnScanNetwork.isEnabled = false
             }
             is DoIpActivationState.VehicleFound -> {
                 val vinLine = state.vin?.let { " (VIN: $it)" } ?: ""
@@ -159,6 +162,38 @@ class DoIpActivationFragment : Fragment() {
                     binding.btnCopyExport.visibility = View.VISIBLE
                     lastExportableState = state
                 }
+            }
+            is DoIpActivationState.NetworkScanResult -> {
+                val summary = buildString {
+                    appendLine("Network: ${state.subnetNote}\n")
+                    if (state.openHosts.isEmpty()) {
+                        appendLine("No open ports found on any host in this subnet.")
+                        appendLine("\nThis usually means the vehicle's DoIP gateway is not")
+                        appendLine("reachable from the external Wi-Fi hotspot interface.")
+                        appendLine("\nOptions:")
+                        appendLine("• Try connecting via OBD2 adapter instead")
+                        appendLine("• Find the vehicle's Ethernet port and connect directly")
+                        appendLine("• Enable Developer Options on the Infotainment screen")
+                    } else {
+                        appendLine("Found ${state.openHosts.size} host(s) with open ports:\n")
+                        state.openHosts.toSortedMap().forEach { (ip, ports) ->
+                            val portLabels = mapOf(13400 to "DoIP", 5555 to "ADB", 80 to "HTTP",
+                                443 to "HTTPS", 8080 to "HTTP-alt", 22 to "SSH", 23 to "Telnet")
+                            append("  $ip  →  ")
+                            appendLine(ports.sorted().joinToString("  ") { p ->
+                                "$p(${portLabels[p] ?: "?"})"
+                            })
+                        }
+                        val hasDoip = state.openHosts.values.any { 13400 in it }
+                        val hasAdb  = state.openHosts.values.any { 5555 in it }
+                        if (hasDoip) appendLine("\nDoIP found! Tap 'Discover Vehicle' to connect.")
+                        if (hasAdb)  appendLine("\nADB port 5555 open! Run: adb connect ${state.openHosts.entries.first { 5555 in it.value }.key}:5555")
+                    }
+                }
+                binding.statusText.text = summary
+                binding.btnCopyExport.text = "Copy Scan Results"
+                binding.btnCopyExport.visibility = View.VISIBLE
+                lastExportableState = state
             }
         }
     }

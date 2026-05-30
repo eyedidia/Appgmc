@@ -24,6 +24,10 @@ sealed class DoIpActivationState {
     data class NeedsSecurityKey(val vcimAddress: Int, val seed: ByteArray) : DoIpActivationState()
     data class DiagnosticMode(val vcimAddress: Int, val didMap: Map<String, String>) : DoIpActivationState()
     data class ActivationError(val message: String, val recoverable: Boolean = true) : DoIpActivationState()
+    data class NetworkScanResult(
+        val openHosts: Map<String, List<Int>>,
+        val subnetNote: String
+    ) : DoIpActivationState()
 }
 
 class DoIpActivationViewModel(app: Application) : AndroidViewModel(app) {
@@ -237,6 +241,25 @@ class DoIpActivationViewModel(app: Application) : AndroidViewModel(app) {
         viewModelScope.launch { runDiagnosticDump(discoveredVcimAddress) }
     }
 
+    fun scanNetwork() {
+        doIpManager.commandLog.clear()
+        activeStepLog.clear()
+        viewModelScope.launch {
+            _uiState.value = DoIpActivationState.Scanning
+            val netInfo = doIpManager.getLocalNetworkInfo()
+            val subnetNote = if (netInfo != null)
+                "${netInfo.first.substringBeforeLast(".")}.x/${netInfo.third}  gw=${netInfo.second}"
+            else "No Wi-Fi connection detected"
+            activeStepLog += GmVcimActivation.StepResult("Network", netInfo != null, subnetNote)
+            emitLogs()
+
+            val openHosts = doIpManager.scanSubnetForPorts()
+            emitLogs()
+
+            _uiState.value = DoIpActivationState.NetworkScanResult(openHosts, subnetNote)
+        }
+    }
+
     private suspend fun runDiagnosticDump(vcimAddr: Int) {
         val didMap = mutableMapOf<String, String>()
         val candidates = listOf(
@@ -303,6 +326,16 @@ class DoIpActivationViewModel(app: Application) : AndroidViewModel(app) {
                 sb.appendLine("SA seed: ${state.seed.joinToString(" ") { "%02X".format(it) }}")
             }
             is DoIpActivationState.ActivationError -> sb.appendLine("Error: ${state.message}")
+            is DoIpActivationState.NetworkScanResult -> {
+                sb.appendLine("--- Network Scan: ${state.subnetNote} ---")
+                if (state.openHosts.isEmpty()) {
+                    sb.appendLine("No open ports found")
+                } else {
+                    state.openHosts.toSortedMap().forEach { (ip, ports) ->
+                        sb.appendLine("$ip: ${ports.sorted().joinToString(", ")}")
+                    }
+                }
+            }
             else -> {}
         }
         val log = doIpManager.commandLog

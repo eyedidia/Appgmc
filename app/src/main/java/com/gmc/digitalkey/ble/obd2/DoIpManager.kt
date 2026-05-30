@@ -42,8 +42,25 @@ class DoIpManager(private val context: Context) {
         private const val TYPE_DIAG_MSG         = 0x8001
         private const val TYPE_DIAG_ACK         = 0x8002
 
-        // K73 VCIM logical addresses to probe (DoIP logical addr ≠ CAN addr, but GM often maps them 1:1)
-        val VCIM_PROBE_ADDRS = listOf(0x0045, 0x0028, 0x007D, 0x0252, 0x07E3, 0x1801, 0x0001, 0x0010)
+        // K73 / VCIM DoIP logical addresses — ordered by probability for GM Ultium.
+        // GM uses 0x0E8x range for telematics on Ultium; 0x0001/0x0002 for A11 Radio gateway.
+        val VCIM_PROBE_ADDRS = listOf(
+            0x0E80,  // K73 Telematics primary (Ultium)
+            0x0E81,  // K73 Telematics alt
+            0x0E82,  // K73 Telematics alt
+            0x0001,  // A11 Radio / Infotainment gateway
+            0x0002,  // A11 Radio alt
+            0x1001,  // K56 Gateway
+            0x1002,  // K56 Gateway alt
+            0x0D01,  // BCM (K9)
+            0x0045,  // CAN-mapped VCIM (Ultium CAN addr)
+            0x0028,  // CAN-mapped K73 alt
+            0x0252,  // Ultium Ethernet CAN addr
+            0x07E3,  // OBD legacy VCIM
+        )
+
+        // Ports to scan when performing a full network scan
+        val SCAN_PORTS = listOf(13400, 5555, 80, 443, 8080, 22, 23, 5900, 8888, 9229)
 
         val BLE_DID_CANDIDATES = listOf(
             0xF1A0 to "F1A0",
@@ -202,6 +219,67 @@ class DoIpManager(private val context: Context) {
             "${parts[0]}.${parts[1]}.${parts[2]}"
         }
         return base24
+    }
+
+    // Full subnet port scan — returns map of IP → list of open ports.
+    // Runs all hosts × all ports in parallel with `timeoutMs` per probe.
+    suspend fun scanSubnetForPorts(
+        ports: List<Int> = SCAN_PORTS,
+        timeoutMs: Int = 400
+    ): Map<String, List<Int>> = withContext(Dispatchers.IO) {
+        val netInfo = getLocalNetworkInfo()
+        if (netInfo == null) {
+            commandLog.add("Subnet scan" to "No network info available")
+            return@withContext emptyMap()
+        }
+        val (localIp, _, prefix) = netInfo
+        val base = computeSubnetBase(localIp, prefix)
+        if (base == null) {
+            commandLog.add("Subnet scan" to "Cannot compute subnet base from $localIp/$prefix")
+            return@withContext emptyMap()
+        }
+        val scanCount = 254
+        commandLog.add("Subnet scan" to "$base.1-$scanCount  ports=${ports.joinToString(",")}  timeout=${timeoutMs}ms  (parallel)")
+
+        val portLabels = mapOf(
+            13400 to "DoIP", 5555 to "ADB", 80 to "HTTP",
+            443 to "HTTPS", 8080 to "HTTP-alt", 22 to "SSH",
+            23 to "Telnet", 5900 to "VNC", 8888 to "Dev", 9229 to "Debug"
+        )
+
+        val results = mutableMapOf<String, MutableList<Int>>()
+        coroutineScope {
+            (1..scanCount).flatMap { i ->
+                val ip = "$base.$i"
+                if (ip == localIp) return@flatMap emptyList()
+                ports.map { port ->
+                    async(Dispatchers.IO) {
+                        try {
+                            Socket().use { s ->
+                                s.connect(InetSocketAddress(ip, port), timeoutMs)
+                                ip to port
+                            }
+                        } catch (_: Exception) { null }
+                    }
+                }
+            }.awaitAll().filterNotNull().forEach { (ip, port) ->
+                synchronized(results) { results.getOrPut(ip) { mutableListOf() }.add(port) }
+            }
+        }
+
+        if (results.isEmpty()) {
+            commandLog.add("Scan result" to "No open ports on any of 254 hosts in $base.x")
+        } else {
+            results.toSortedMap().forEach { (ip, openPorts) ->
+                val labels = openPorts.sorted().joinToString(", ") { p ->
+                    "$p(${portLabels[p] ?: "?"})"
+                }
+                val doipNote = if (13400 in openPorts) " ← DoIP server!" else ""
+                val adbNote  = if (5555 in openPorts)  " ← ADB!"        else ""
+                commandLog.add("Host $ip" to "$labels$doipNote$adbNote")
+            }
+        }
+        results
     }
 
     private fun parseAnnouncement(data: ByteArray, ip: String): DiscoveryResult.Found? {
