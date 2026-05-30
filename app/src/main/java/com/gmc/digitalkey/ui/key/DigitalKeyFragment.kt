@@ -1,11 +1,17 @@
 package com.gmc.digitalkey.ui.key
 
 import android.annotation.SuppressLint
+import android.content.ClipData
+import android.content.ClipboardManager
+import android.content.Context
 import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import android.view.animation.AnimationUtils
+import android.widget.ScrollView
+import android.widget.TextView
+import android.widget.Toast
 import androidx.activity.result.ActivityResultLauncher
 import androidx.fragment.app.Fragment
 import androidx.fragment.app.viewModels
@@ -123,6 +129,11 @@ class DigitalKeyFragment : Fragment() {
                 binding.keyStatusSub.text = getString(R.string.ble_connecting)
                 binding.bleIconCenter.setColorFilter(requireContext().getColor(R.color.status_warning))
             }
+            is BleConnectionState.GattDump -> {
+                binding.keyStatusSub.text = "GATT dump: ${state.services.size} services"
+                binding.bleIconCenter.setColorFilter(requireContext().getColor(R.color.status_connected))
+                showGattDumpDialog(state)
+            }
             is BleConnectionState.BluetoothOff -> {
                 binding.keyStatusLabel.text = getString(R.string.digital_key_inactive)
                 binding.keyStatusSub.text = getString(R.string.ble_off)
@@ -209,6 +220,45 @@ class DigitalKeyFragment : Fragment() {
             }
             binding.pairedVehiclesContainer.addView(cardView)
         }
+    }
+
+    @SuppressLint("SetTextI18n")
+    private fun showGattDumpDialog(dump: BleConnectionState.GattDump) {
+        val sb = StringBuilder()
+        sb.appendLine("Device: ${dump.device.address}")
+        sb.appendLine("Services: ${dump.services.size}")
+        sb.appendLine()
+        dump.services.forEach { svc ->
+            sb.appendLine("SERVICE")
+            sb.appendLine(svc.uuid)
+            svc.characteristics.forEach { c ->
+                sb.appendLine("  CHAR ${c.uuid}")
+                sb.appendLine("    [${c.properties}]")
+                if (c.value.isNotEmpty()) sb.appendLine("    = ${c.value}")
+            }
+            sb.appendLine()
+        }
+        val text = sb.toString().trimEnd()
+
+        val tv = TextView(requireContext()).apply {
+            this.text = text
+            textSize = 10f
+            typeface = Typeface.MONOSPACE
+            setTextColor(requireContext().getColor(R.color.text_primary))
+            setPadding(32, 16, 32, 16)
+        }
+        val scroll = ScrollView(requireContext()).apply { addView(tv) }
+
+        MaterialAlertDialogBuilder(requireContext())
+            .setTitle("GATT Dump")
+            .setView(scroll)
+            .setPositiveButton("Copy") { _, _ ->
+                val cb = requireContext().getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                cb.setPrimaryClip(ClipData.newPlainText("GATT Dump", text))
+                Toast.makeText(requireContext(), "Copied", Toast.LENGTH_SHORT).show()
+            }
+            .setNegativeButton("Close", null)
+            .show()
     }
 
     private fun showUnpairDialog(vehicle: VehicleEntity) {
