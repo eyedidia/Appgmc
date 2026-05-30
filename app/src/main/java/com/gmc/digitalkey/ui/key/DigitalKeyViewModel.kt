@@ -17,6 +17,9 @@ import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import java.util.*
 
+// One-shot event: first GM manufacturer-ID device seen in current raw scan
+data class GmDeviceAlert(val advert: RawAdvert)
+
 data class ScannedDevice(
     val device: BluetoothDevice,
     val rssi: Int,
@@ -51,6 +54,10 @@ class DigitalKeyViewModel(app: Application) : AndroidViewModel(app) {
 
     private val _qrResult = MutableStateFlow<QrPairingParser.PairingHints?>(null)
     val qrResult: StateFlow<QrPairingParser.PairingHints?> = _qrResult.asStateFlow()
+
+    // Emits once whenever a new GM-manufacturer device appears for the first time in a scan
+    private val _gmAlert = MutableSharedFlow<GmDeviceAlert>(extraBufferCapacity = 1)
+    val gmAlert: SharedFlow<GmDeviceAlert> = _gmAlert.asSharedFlow()
 
     @SuppressLint("MissingPermission")
     fun startScan() {
@@ -118,9 +125,12 @@ class DigitalKeyViewModel(app: Application) : AndroidViewModel(app) {
             onFound = { advert ->
                 val current = _rawDevices.value.toMutableList()
                 val idx = current.indexOfFirst { it.address == advert.address }
+                val isNew = idx < 0
                 if (idx >= 0) current[idx] = advert else current.add(advert)
                 current.sortByDescending { it.rssi }
                 _rawDevices.value = current
+                // Fire alert the first time we see a GM device (0x005D manufacturer ID)
+                if (isNew && advert.isGm) _gmAlert.tryEmit(GmDeviceAlert(advert))
             },
             onStopped = { _isRawScanning.value = false }
         )

@@ -4,7 +4,11 @@ import android.annotation.SuppressLint
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
+import android.os.Build
 import android.os.Bundle
+import android.os.VibrationEffect
+import android.os.Vibrator
+import android.os.VibratorManager
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
@@ -35,6 +39,7 @@ class DigitalKeyFragment : Fragment() {
     private val viewModel: DigitalKeyViewModel by viewModels()
 
     private lateinit var qrLauncher: ActivityResultLauncher<ScanOptions>
+    private var lastQrHints: com.gmc.digitalkey.ble.QrPairingParser.PairingHints? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -96,12 +101,60 @@ class DigitalKeyFragment : Fragment() {
         viewLifecycleOwner.lifecycleScope.launch {
             viewModel.qrResult.collect { hints ->
                 if (hints == null) return@collect
+                lastQrHints = hints
                 binding.tvQrResult.text = hints.summary()
                 binding.tvQrResult.visibility = View.VISIBLE
+                if (hints.bleAddress != null) {
+                    binding.btnConnectQrBle.visibility = View.VISIBLE
+                    binding.btnConnectQrBle.text = "Connect + GATT Dump  ${hints.bleAddress}"
+                    binding.btnConnectQrBle.setOnClickListener {
+                        connectQrBleAddress(hints.bleAddress)
+                    }
+                } else {
+                    binding.btnConnectQrBle.visibility = View.GONE
+                }
             }
         }
         viewLifecycleOwner.lifecycleScope.launch {
             viewModel.rawDevices.collect { devices -> updateRawDevicesList(devices) }
+        }
+        viewLifecycleOwner.lifecycleScope.launch {
+            viewModel.gmAlert.collect { alert ->
+                vibrateDevice()
+                Toast.makeText(
+                    requireContext(),
+                    "★ GM Vehicle detected: ${alert.advert.address}  — tap for GATT dump",
+                    Toast.LENGTH_LONG
+                ).show()
+            }
+        }
+    }
+
+    @SuppressLint("MissingPermission")
+    private fun connectQrBleAddress(mac: String) {
+        try {
+            val adapter = android.bluetooth.BluetoothAdapter.getDefaultAdapter() ?: return
+            val device = adapter.getRemoteDevice(mac)
+            viewModel.dumpVehicleGatt(device)
+            Toast.makeText(requireContext(), "Connecting to $mac…", Toast.LENGTH_SHORT).show()
+        } catch (e: Exception) {
+            Toast.makeText(requireContext(), "Invalid address: $mac", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    private fun vibrateDevice() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            val vm = requireContext().getSystemService(VibratorManager::class.java)
+            vm?.defaultVibrator?.vibrate(VibrationEffect.createOneShot(400, VibrationEffect.DEFAULT_AMPLITUDE))
+        } else {
+            @Suppress("DEPRECATION")
+            val v = requireContext().getSystemService(Context.VIBRATOR_SERVICE) as? Vibrator
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                v?.vibrate(VibrationEffect.createOneShot(400, VibrationEffect.DEFAULT_AMPLITUDE))
+            } else {
+                @Suppress("DEPRECATION")
+                v?.vibrate(400)
+            }
         }
     }
 

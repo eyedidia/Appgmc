@@ -8,6 +8,8 @@ import com.gmc.digitalkey.ble.obd2.GmVcimActivation
 import com.gmc.digitalkey.db.AppDatabase
 import com.gmc.digitalkey.vin.VinDecoder
 import com.gmc.digitalkey.vin.VinInfo
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -299,6 +301,61 @@ class DoIpActivationViewModel(app: Application) : AndroidViewModel(app) {
         _terminalLog.value = emptyList()
         activeStepLog.clear()
         _stepLog.value = emptyList()
+    }
+
+    // ─── F1A0 BLE-state monitor (pairing window tool) ────────────────────────
+
+    private val _isMonitoring = MutableStateFlow(false)
+    val isMonitoring: StateFlow<Boolean> = _isMonitoring.asStateFlow()
+
+    private var monitorJob: Job? = null
+
+    /** Poll DID F1A0 on ECU 0x0080 every 2 s for up to 120 s.
+     *  Logs every response so the user can see if BLE state flips 00→01. */
+    fun toggleMonitorBleDid() {
+        if (_isMonitoring.value) {
+            monitorJob?.cancel()
+            _isMonitoring.value = false
+            _terminalLog.value = _terminalLog.value + ("MONITOR" to "Stopped")
+            return
+        }
+
+        monitorJob = viewModelScope.launch {
+            _isMonitoring.value = true
+            doIpManager.commandLog.clear()
+            val addr = 0x0080
+            _terminalLog.value = listOf("MONITOR" to "Polling ECU 0x0080 DID F1A0 every 2 s (120 s max)…")
+
+            var lastValue = ""
+            val deadline = System.currentTimeMillis() + 120_000L
+
+            while (System.currentTimeMillis() < deadline && _isMonitoring.value) {
+                try {
+                    val r = doIpManager.sendUds(addr, byteArrayOf(0x22, 0xF1.toByte(), 0xA0.toByte()))
+                    val hex = r.joinToString(" ") { "%02X".format(it) }
+                    val label = when {
+                        r.firstOrNull() == 0x62.toByte() && r.size >= 4 ->
+                            if (r[3] == 0x01.toByte()) "BLE ON ★" else "BLE off"
+                        r.firstOrNull() == 0x7F.toByte() ->
+                            "NRC ${r.getOrNull(2)?.let { "%02X".format(it) } ?: "?"}"
+                        else -> "?"
+                    }
+                    val entry = "F1A0 @ 0x0080" to "$label  [$hex]"
+                    if (hex != lastValue) {
+                        lastValue = hex
+                        _terminalLog.value = _terminalLog.value + ("CHANGE ★★★" to "$label  [$hex]")
+                    } else {
+                        _terminalLog.value = (_terminalLog.value.dropLast(1)) + entry
+                    }
+                } catch (e: Exception) {
+                    _terminalLog.value = _terminalLog.value + ("F1A0 error" to (e.message ?: "timeout"))
+                }
+                delay(2_000)
+            }
+
+            _isMonitoring.value = false
+            _terminalLog.value = _terminalLog.value + ("MONITOR" to "Done (120 s elapsed)")
+        }
     }
 
     fun emitLogs() {

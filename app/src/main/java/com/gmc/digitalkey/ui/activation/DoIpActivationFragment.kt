@@ -40,6 +40,7 @@ class DoIpActivationFragment : Fragment() {
 
         binding.btnDiscover.setOnClickListener { viewModel.startDiscovery() }
         binding.btnScanNetwork.setOnClickListener { viewModel.scanNetwork() }
+        binding.btnMonitorBle.setOnClickListener { viewModel.toggleMonitorBleDid() }
         binding.btnRunDiagnostic.setOnClickListener { viewModel.runDiagnosticDumpPublic() }
         binding.btnCopyExport.setOnClickListener { copyToClipboard(viewModel.buildExportText(lastExportableState)) }
         binding.btnGoToPairing.setOnClickListener { findNavController().navigate(R.id.vehicleSelectFragment) }
@@ -63,6 +64,13 @@ class DoIpActivationFragment : Fragment() {
         }
         viewLifecycleOwner.lifecycleScope.launch {
             viewModel.stepLog.collect { renderStepLog(it) }
+        }
+        viewLifecycleOwner.lifecycleScope.launch {
+            viewModel.isMonitoring.collect { monitoring ->
+                binding.btnMonitorBle.text = if (monitoring)
+                    "■ Stop F1A0 Monitor" else "Monitor F1A0 During Pairing Window"
+                binding.terminalCard.visibility = if (monitoring) View.VISIBLE else binding.terminalCard.visibility
+            }
         }
     }
 

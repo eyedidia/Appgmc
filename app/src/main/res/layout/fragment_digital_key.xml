@@ -167,6 +167,16 @@
                     android:background="#0D00CC66"
                     android:padding="10dp"
                     android:visibility="gone"
+                    android:layout_marginBottom="4dp" />
+
+                <!-- Connect to BLE address from QR -->
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btn_connect_qr_ble"
+                    style="@style/Widget.GMC.Button.Outlined"
+                    android:layout_width="match_parent"
+                    android:layout_height="44dp"
+                    android:text="Connect + GATT Dump (address from QR)"
+                    android:visibility="gone"
                     android:layout_marginBottom="12dp" />
 
                 <!-- Raw BLE scan button -->
