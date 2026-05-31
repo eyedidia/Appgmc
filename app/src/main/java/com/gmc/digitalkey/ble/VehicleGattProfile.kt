@@ -4,26 +4,43 @@ import java.util.UUID
 
 object VehicleGattProfile {
 
-    // GM Digital Key primary service
-    val SERVICE_UUID: UUID = UUID.fromString("0000FE2C-0000-1000-8000-00805F9B34FB")
+    // GM uses Google Android Auto Companion (automotive_trustagent) for BLE digital key.
+    // These UUIDs were confirmed by decompiling the official myGMC APK (classes4.dex).
+    //
+    // Association service — advertised during pairing window ("Searching for Phone" QR screen)
+    val SERVICE_UUID: UUID = UUID.fromString("5E2A68A6-27BE-43F9-8D1E-4546976FABD7")
 
-    // Challenge from vehicle (READ + NOTIFY)
-    val CHAR_CHALLENGE: UUID = UUID.fromString("0000FE2D-0000-1000-8000-00805F9B34FB")
+    // Reconnection service — advertised when vehicle recognises a previously paired phone
+    val RECONNECTION_SERVICE_UUID: UUID = UUID.fromString("5E2A68A5-27BE-43F9-8D1E-4546976FABD7")
 
-    // Signed response from phone (WRITE)
-    val CHAR_RESPONSE: UUID = UUID.fromString("0000FE2E-0000-1000-8000-00805F9B34FB")
+    // V2 service (newer protocol variant also present in classes4.dex)
+    val V2_SERVICE_UUID: UUID = UUID.fromString("5EFD8B16-21D6-4FB1-B00A-A904720D1320")
 
-    // Command bytes (WRITE WITHOUT RESPONSE)
-    val CHAR_COMMAND: UUID = UUID.fromString("0000FE2F-0000-1000-8000-00805F9B34FB")
+    // Characteristics — phone writes to car (WRITE / WRITE_NO_RESPONSE)
+    // Actual UUIDs to be confirmed via GATT dump during pairing window
+    val CHAR_CLIENT_WRITE: UUID = UUID.fromString("74BCDADC-2FDC-4BB3-8459-76D06952A0E9")
 
-    // Vehicle status updates (READ + NOTIFY)
-    val CHAR_STATUS: UUID = UUID.fromString("0000FE30-0000-1000-8000-00805F9B34FB")
+    // Characteristics — car writes to phone (NOTIFY / INDICATE)
+    val CHAR_SERVER_WRITE: UUID = UUID.fromString("85DFF28B-3036-4662-BB22-BAA7F898DC47")
 
-    // EV charging data (READ + NOTIFY)
-    val CHAR_CHARGING: UUID = UUID.fromString("0000FE31-0000-1000-8000-00805F9B34FB")
+    // Additional characteristic candidates from classes4.dex (role TBD via GATT dump)
+    val CHAR_EXTRA_1: UUID = UUID.fromString("87749DF4-7CCF-48F8-AA87-704BAD0E0E16")
+    val CHAR_EXTRA_2: UUID = UUID.fromString("892AC5D9-E9A5-48DC-874A-C01E3CB00D5D")
+    val CHAR_EXTRA_3: UUID = UUID.fromString("9188040D-6C67-4C5B-B112-36A304B66DAD")
+    val CHAR_EXTRA_4: UUID = UUID.fromString("9EB6528D-BB65-4239-B196-6789196CF2A9")
 
-    // CCCD descriptor for enabling notifications
+    // CCCD descriptor for enabling notifications (standard BLE)
     val DESC_CCCD: UUID = UUID.fromString("00002902-0000-1000-8000-00805F9B34FB")
+
+    // Keep legacy aliases so callers compile without change (will be wired to real chars after GATT dump)
+    val CHAR_CHALLENGE: UUID = CHAR_SERVER_WRITE   // car → phone challenge
+    val CHAR_RESPONSE:  UUID = CHAR_CLIENT_WRITE   // phone → car signed response
+    val CHAR_COMMAND:   UUID = CHAR_CLIENT_WRITE   // phone → car lock/unlock command
+    val CHAR_STATUS:    UUID = CHAR_EXTRA_1
+    val CHAR_CHARGING:  UUID = CHAR_EXTRA_2
+
+    /** All service UUIDs to include in the BLE scan filter. */
+    val SCAN_SERVICE_UUIDS = listOf(SERVICE_UUID, RECONNECTION_SERVICE_UUID, V2_SERVICE_UUID)
 
     object Commands {
         const val LOCK: Byte = 0x01
@@ -44,9 +61,8 @@ object VehicleGattProfile {
     fun buildChargeLimitCommand(limitPercent: Int): ByteArray =
         byteArrayOf(Commands.SET_CHARGE_LIMIT, limitPercent.coerceIn(20, 100).toByte())
 
-    fun parseVehicleStatus(bytes: ByteArray): Byte {
-        return if (bytes.isNotEmpty()) bytes[0] else 0x00
-    }
+    fun parseVehicleStatus(bytes: ByteArray): Byte =
+        if (bytes.isNotEmpty()) bytes[0] else 0x00
 
     fun parseChargingData(bytes: ByteArray): Triple<Int, Int, Float> {
         if (bytes.size < 6) return Triple(-1, -1, 0f)

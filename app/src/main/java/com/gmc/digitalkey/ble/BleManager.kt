@@ -94,12 +94,14 @@ class BleManager(private val context: Context) {
             .setScanMode(ScanSettings.SCAN_MODE_LOW_LATENCY)
             .build()
 
-        // Filtered scan: devices advertising the GM Digital Key service (FE2C)
-        val gmFilter = listOf(
+        // Filtered scan: devices advertising any GM Digital Key / Trustagent service UUID.
+        // Three real UUIDs confirmed from myGMC APK (classes4.dex):
+        //   5E2A68A6 = Association (pairing window), 5E2A68A5 = Reconnection, 5EFD8B16 = V2
+        val gmFilters = VehicleGattProfile.SCAN_SERVICE_UUIDS.map { uuid ->
             ScanFilter.Builder()
-                .setServiceUuid(android.os.ParcelUuid(VehicleGattProfile.SERVICE_UUID))
+                .setServiceUuid(android.os.ParcelUuid(uuid))
                 .build()
-        )
+        }
 
         val found = mutableSetOf<String>()
 
@@ -122,7 +124,7 @@ class BleManager(private val context: Context) {
         }
 
         // Run both scans in parallel — GM-filtered finds vehicle even without a name
-        scanner?.startScan(gmFilter, settings, gmCallback)
+        scanner?.startScan(gmFilters, settings, gmCallback)
         scanner?.startScan(null, settings, allCallback)
 
         handler.postDelayed({ stopScan(); onStopped() }, 30_000)
