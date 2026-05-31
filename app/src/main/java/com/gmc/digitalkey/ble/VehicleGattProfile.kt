@@ -16,6 +16,13 @@ object VehicleGattProfile {
     // V2 service (newer protocol variant also present in classes4.dex)
     val V2_SERVICE_UUID: UUID = UUID.fromString("5EFD8B16-21D6-4FB1-B00A-A904720D1320")
 
+    // VipKit BLE service UUIDs (com.vipkit / IVIPRemoteService — vehicle data + commands stack)
+    // Confirmed in classes4.dex alongside the trustagent UUIDs.
+    // VipKit is a separate AIDL service for vehicle data and remote commands.
+    val VIPKIT_UUID_1: UUID = UUID.fromString("7AA4B91C-3888-4A3D-A448-3BF3402A6C0F")
+    val VIPKIT_UUID_2: UUID = UUID.fromString("BAF7B76F-D419-40CE-8AEB-2B80C6510123")
+    val VIPKIT_UUID_3: UUID = UUID.fromString("24289B40-AF40-4149-A5F4-878CCFF87566")
+
     // Characteristics — phone writes to car (WRITE / WRITE_NO_RESPONSE)
     // Actual UUIDs to be confirmed via GATT dump during pairing window
     val CHAR_CLIENT_WRITE: UUID = UUID.fromString("74BCDADC-2FDC-4BB3-8459-76D06952A0E9")
@@ -39,8 +46,11 @@ object VehicleGattProfile {
     val CHAR_STATUS:    UUID = CHAR_EXTRA_1
     val CHAR_CHARGING:  UUID = CHAR_EXTRA_2
 
-    /** All service UUIDs to include in the BLE scan filter. */
-    val SCAN_SERVICE_UUIDS = listOf(SERVICE_UUID, RECONNECTION_SERVICE_UUID, V2_SERVICE_UUID)
+    /** All service UUIDs to include in the BLE scan filter — covers all three BLE stacks. */
+    val SCAN_SERVICE_UUIDS = listOf(
+        SERVICE_UUID, RECONNECTION_SERVICE_UUID, V2_SERVICE_UUID,  // automotive_trustagent
+        VIPKIT_UUID_1, VIPKIT_UUID_2, VIPKIT_UUID_3                // VipKit
+    )
 
     object Commands {
         const val LOCK: Byte = 0x01
