@@ -130,6 +130,14 @@
             android:layout_marginBottom="8dp" />
 
         <com.google.android.material.button.MaterialButton
+            android:id="@+id/btn_scan_write_all"
+            style="@style/Widget.GMC.Button.Outlined"
+            android:layout_width="match_parent"
+            android:layout_height="52dp"
+            android:text="Scan &amp; Write All ECUs (Force BLE ON)"
+            android:layout_marginBottom="8dp" />
+
+        <com.google.android.material.button.MaterialButton
             android:id="@+id/btn_run_diagnostic"
             style="@style/Widget.GMC.Button.Outlined"
             android:layout_width="match_parent"

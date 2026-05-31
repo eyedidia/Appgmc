@@ -41,6 +41,7 @@ class DoIpActivationFragment : Fragment() {
         binding.btnDiscover.setOnClickListener { viewModel.startDiscovery() }
         binding.btnScanNetwork.setOnClickListener { viewModel.scanNetwork() }
         binding.btnMonitorBle.setOnClickListener { viewModel.toggleMonitorBleDid() }
+        binding.btnScanWriteAll.setOnClickListener { viewModel.scanAndWriteAllEcus() }
         binding.btnRunDiagnostic.setOnClickListener { viewModel.runDiagnosticDumpPublic() }
         binding.btnCopyExport.setOnClickListener { copyToClipboard(viewModel.buildExportText(lastExportableState)) }
         binding.btnGoToPairing.setOnClickListener { findNavController().navigate(R.id.vehicleSelectFragment) }
@@ -170,6 +171,26 @@ class DoIpActivationFragment : Fragment() {
                     binding.btnCopyExport.visibility = View.VISIBLE
                     lastExportableState = state
                 }
+            }
+            is DoIpActivationState.AllEcuResults -> {
+                val sb = StringBuilder()
+                if (state.anySuccess) {
+                    sb.appendLine("✓ BLE enabled on at least one ECU!\n")
+                    sb.appendLine("Disconnect from vehicle Wi-Fi and run BLE scan.\n")
+                }
+                sb.appendLine("Results (${state.results.size} ECUs responded):\n")
+                state.results.forEach { ecu ->
+                    val addrStr = "0x%04X".format(ecu.addr)
+                    val nameStr = ecu.moduleName?.let { " ($it)" } ?: ""
+                    val bleStr  = ecu.bleValue?.let { "F1A0=%02X".format(it) } ?: "F1A0=N/A"
+                    val writeStr = ecu.writeResult ?: "not tried"
+                    sb.appendLine("$addrStr$nameStr  $bleStr  →  $writeStr")
+                }
+                binding.statusText.text = sb.toString().trimEnd()
+                if (state.anySuccess) binding.btnGoToPairing.visibility = View.VISIBLE
+                binding.btnCopyExport.text = "Copy Results"
+                binding.btnCopyExport.visibility = View.VISIBLE
+                lastExportableState = state
             }
             is DoIpActivationState.NetworkScanResult -> {
                 val summary = buildString {

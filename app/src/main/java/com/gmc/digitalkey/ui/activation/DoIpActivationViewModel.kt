@@ -30,6 +30,12 @@ sealed class DoIpActivationState {
         val openHosts: Map<String, List<Int>>,
         val subnetNote: String
     ) : DoIpActivationState()
+
+    /** Results of scanning all ECU addresses for F1A0 and attempting to write. */
+    data class AllEcuResults(
+        val results: List<DoIpManager.EcuBleStatus>,
+        val anySuccess: Boolean
+    ) : DoIpActivationState()
 }
 
 class DoIpActivationViewModel(app: Application) : AndroidViewModel(app) {
@@ -281,6 +287,70 @@ class DoIpActivationViewModel(app: Application) : AndroidViewModel(app) {
         _uiState.value = DoIpActivationState.DiagnosticMode(vcimAddr, didMap)
     }
 
+    /** Scan ALL probe addresses for F1A0 state, then write BLE=01 on every responsive ECU.
+     *  Requires an active DoIP connection (call startDiscovery first, or connect manually). */
+    fun scanAndWriteAllEcus() {
+        viewModelScope.launch {
+            _uiState.value = DoIpActivationState.DiscoveringEcus
+            doIpManager.commandLog.clear()
+            activeStepLog.clear()
+
+            // If not connected, try to connect first
+            if (doIpManager.state.value !is com.gmc.digitalkey.ble.obd2.DoIpState.Connected) {
+                activeStepLog += GmVcimActivation.StepResult("DoIP connection", false,
+                    "Not connected — tap 'Discover Vehicle' first to establish DoIP session")
+                emitLogs()
+                _uiState.value = DoIpActivationState.ActivationError(
+                    "No active DoIP connection.\n\nTap 'Discover Vehicle' first, then use 'Scan & Write All ECUs'.",
+                    recoverable = true
+                )
+                return@launch
+            }
+
+            activeStepLog += GmVcimActivation.StepResult("Broadcast scan", true,
+                "Reading F1A0 from ${com.gmc.digitalkey.ble.obd2.DoIpManager.VCIM_PROBE_ADDRS.size} addresses…")
+            emitLogs()
+
+            // Phase 1: scan all ECUs for F1A0
+            val scanned = doIpManager.scanAllEcusForBle()
+            activeStepLog += GmVcimActivation.StepResult("ECUs found", scanned.isNotEmpty(),
+                if (scanned.isEmpty()) "No ECUs responded"
+                else scanned.joinToString("  ") { "0x%04X".format(it.addr) })
+            emitLogs()
+
+            if (scanned.isEmpty()) {
+                _uiState.value = DoIpActivationState.ActivationError(
+                    "No ECUs responded on any probe address.\nVehicle must be in READY/ACC mode.",
+                    recoverable = true
+                )
+                return@launch
+            }
+
+            // Phase 2: write BLE=01 on each responsive ECU
+            val written = scanned.map { ecu ->
+                activeStepLog += GmVcimActivation.StepResult(
+                    "Write → 0x%04X".format(ecu.addr), true, "Trying…")
+                emitLogs()
+
+                val writeResult = doIpManager.writeBleDid(ecu.addr)
+                val ok = writeResult.startsWith("✓")
+                activeStepLog[activeStepLog.lastIndex] = GmVcimActivation.StepResult(
+                    "Write → 0x%04X (${ecu.moduleName ?: "?"})".format(ecu.addr), ok, writeResult)
+                emitLogs()
+                ecu.copy(writeResult = writeResult)
+            }
+
+            val anySuccess = written.any { it.writeResult?.startsWith("✓") == true }
+            if (anySuccess) {
+                activeStepLog += GmVcimActivation.StepResult("Result", true,
+                    "BLE enabled on at least one ECU — remove OBD2 adapter, scan for vehicle BLE")
+                emitLogs()
+            }
+
+            _uiState.value = DoIpActivationState.AllEcuResults(written, anySuccess)
+        }
+    }
+
     fun sendUdsCommand(addrHex: String, pduHex: String) {
         if (addrHex.isBlank() || pduHex.isBlank()) return
         viewModelScope.launch {
@@ -381,6 +451,14 @@ class DoIpActivationViewModel(app: Application) : AndroidViewModel(app) {
             }
             is DoIpActivationState.NeedsSecurityKey -> {
                 sb.appendLine("SA seed: ${state.seed.joinToString(" ") { "%02X".format(it) }}")
+            }
+            is DoIpActivationState.AllEcuResults -> {
+                sb.appendLine("--- All ECU BLE Scan + Write Results ---")
+                state.results.forEach { ecu ->
+                    sb.appendLine(
+                        "0x%04X  ${ecu.moduleName ?: "?"}  F1A0=${ecu.bleValue?.let { "%02X".format(it) } ?: "N/A"}  ${ecu.writeResult ?: "-"}"
+                    )
+                }
             }
             is DoIpActivationState.ActivationError -> sb.appendLine("Error: ${state.message}")
             is DoIpActivationState.NetworkScanResult -> {

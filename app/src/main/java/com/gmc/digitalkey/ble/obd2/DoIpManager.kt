@@ -62,15 +62,23 @@ class DoIpManager(private val context: Context) {
         // Ports to scan when performing a full network scan
         val SCAN_PORTS = listOf(13400, 5555, 80, 443, 8080, 22, 23, 5900, 8888, 9229)
 
-        val BLE_DID_CANDIDATES = listOf(
+    val BLE_DID_CANDIDATES = listOf(
             0xF1A0 to "F1A0",
             0xF1B0 to "F1B0",
             0x4100 to "4100",
             0x4101 to "4101",
+            0x4200 to "4200",  // OnStar provisioning candidate
             0x0200 to "0200",
             0xF180 to "F180",
         )
     }
+
+    data class EcuBleStatus(
+        val addr: Int,
+        val moduleName: String?,
+        val bleValue: Byte?,        // current F1A0 value; null = DID not readable
+        val writeResult: String?,   // null = not attempted yet
+    )
 
     sealed class DiscoveryResult {
         data class Found(val ip: String, val vin: String?, val logicalAddress: Int) : DiscoveryResult()
@@ -394,6 +402,81 @@ class DoIpManager(private val context: Context) {
             }
         } catch (_: Exception) { null }
     }
+
+    // ─── Broadcast scan + write ────────────────────────────────────────────────
+    // Probes EVERY logical address: reads current F1A0, then tries to write 01.
+    // Returns one result per responsive ECU — lets us see exactly which module
+    // controls the BLE flag and whether SA is required for that specific module.
+
+    suspend fun scanAllEcusForBle(): List<EcuBleStatus> = withContext(Dispatchers.IO) {
+        val results = mutableListOf<EcuBleStatus>()
+        commandLog.add("ECU broadcast scan" to "probing ${VCIM_PROBE_ADDRS.size} addresses…")
+        for (addr in VCIM_PROBE_ADDRS) {
+            try {
+                // Quick ping — DefaultSession (10 01)
+                val ping = sendUds(addr, byteArrayOf(0x10, 0x01))
+                if (ping.firstOrNull() != 0x50.toByte()) continue
+
+                // Read module name (F18A)
+                var name: String? = null
+                runCatching {
+                    val r = sendUds(addr, byteArrayOf(0x22, 0xF1.toByte(), 0x8A.toByte()))
+                    if (r.firstOrNull() == 0x62.toByte() && r.size > 3)
+                        name = String(r.drop(3).toByteArray(), Charsets.US_ASCII).trim()
+                }
+
+                // Read F1A0
+                var bleVal: Byte? = null
+                runCatching {
+                    val r = sendUds(addr, byteArrayOf(0x22, 0xF1.toByte(), 0xA0.toByte()))
+                    if (r.firstOrNull() == 0x62.toByte() && r.size >= 4) bleVal = r[3]
+                }
+
+                commandLog.add(
+                    "ECU 0x%04X".format(addr),
+                    "F1A0=${bleVal?.let { "%02X".format(it) } ?: "N/A"}  name=${name ?: "?"}"
+                )
+                results.add(EcuBleStatus(addr, name, bleVal, null))
+            } catch (_: Exception) {}
+        }
+        commandLog.add("ECU broadcast scan" to "found ${results.size} responsive ECUs")
+        results
+    }
+
+    suspend fun writeBleDid(addr: Int): String = withContext(Dispatchers.IO) {
+        // Open extended session
+        runCatching { sendUds(addr, byteArrayOf(0x10, 0x03)) }
+
+        for ((did, label) in listOf(0xF1A0 to "F1A0", 0xF1B0 to "F1B0", 0x4100 to "4100")) {
+            try {
+                val r = sendUds(addr, byteArrayOf(0x2E, (did shr 8).toByte(), (did and 0xFF).toByte(), 0x01))
+                when (r.firstOrNull()?.toInt()?.and(0xFF)) {
+                    0x6E -> {
+                        commandLog.add("Write $label @ 0x%04X".format(addr), "✓ SUCCESS (6E)")
+                        return@withContext "✓ $label written (BLE enabled!)"
+                    }
+                    0x7F -> {
+                        val nrc = r.getOrNull(2)?.toInt()?.and(0xFF) ?: 0
+                        val desc = when (nrc) {
+                            0x33 -> "SecurityAccess required"
+                            0x31 -> "requestOutOfRange (not writable here)"
+                            0x22 -> "conditionsNotCorrect"
+                            0x24 -> "requestSequenceError"
+                            0x35 -> "invalidKey"
+                            else -> "NRC 0x%02X".format(nrc)
+                        }
+                        commandLog.add("Write $label @ 0x%04X".format(addr), "✗ $desc")
+                        // NRC 0x31 = DID not supported on this ECU; try next DID
+                        if (nrc != 0x31) return@withContext "✗ $label: $desc"
+                    }
+                }
+            } catch (_: Exception) {}
+        }
+        "✗ No writable BLE DID found"
+    }
+
+    // Helper for commandLog (allows two-arg form)
+    private fun MutableList<Pair<String,String>>.add(cmd: String, resp: String) = add(cmd to resp)
 
     fun disconnect() {
         runCatching { tcpSocket?.close() }
