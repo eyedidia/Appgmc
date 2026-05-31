@@ -69,6 +69,7 @@ class BleManager(private val context: Context) {
     private var reconnectAttempts = 0
     private val handler = Handler(Looper.getMainLooper())
     private var scanner: BluetoothLeScanner? = null
+    private var scanAllCallback: ScanCallback? = null
     private var rawScanCallback: ScanCallback? = null
 
     val isBluetoothOn get() = adapter?.isEnabled == true
@@ -87,54 +88,51 @@ class BleManager(private val context: Context) {
     fun scanAll(onFound: (BluetoothDevice, Int, Boolean) -> Unit, onStopped: () -> Unit = {}) {
         if (!isBluetoothOn) { _connectionState.value = BleConnectionState.BluetoothOff; return }
         if (!hasScanPermission()) { _connectionState.value = BleConnectionState.PermissionDenied; return }
+
+        // Stop any previous scan before starting a new one
+        stopScan()
+
         _connectionState.value = BleConnectionState.Scanning
-        scanner = adapter.bluetoothLeScanner
+        val leScanner = adapter.bluetoothLeScanner ?: return
+        scanner = leScanner
 
         val settings = ScanSettings.Builder()
             .setScanMode(ScanSettings.SCAN_MODE_LOW_LATENCY)
             .build()
 
-        // Filtered scan: devices advertising any GM Digital Key / Trustagent service UUID.
-        // Three real UUIDs confirmed from myGMC APK (classes4.dex):
+        // GM real service UUIDs confirmed from myGMC APK (classes4.dex):
         //   5E2A68A6 = Association (pairing window), 5E2A68A5 = Reconnection, 5EFD8B16 = V2
-        val gmFilters = VehicleGattProfile.SCAN_SERVICE_UUIDS.map { uuid ->
-            ScanFilter.Builder()
-                .setServiceUuid(android.os.ParcelUuid(uuid))
-                .build()
-        }
+        val gmParcelUuids = VehicleGattProfile.SCAN_SERVICE_UUIDS
+            .map { android.os.ParcelUuid(it) }.toSet()
 
-        val found = mutableSetOf<String>()
-
-        val gmCallback = object : ScanCallback() {
+        // Single unfiltered scan — check GM service UUIDs inline from the scan record.
+        // Using two concurrent scans previously caused SCAN_FAILED_OUT_OF_HARDWARE_RESOURCES
+        // (error 2) because Android limits simultaneous scans per app; and the old stopScan()
+        // passed a new anonymous callback to stopScan() which never stopped the running scan.
+        val cb = object : ScanCallback() {
             override fun onScanResult(callbackType: Int, result: ScanResult) {
-                found.add(result.device.address)
-                onFound(result.device, result.rssi, true)  // hasGmService = true
-            }
-        }
-
-        val allCallback = object : ScanCallback() {
-            override fun onScanResult(callbackType: Int, result: ScanResult) {
-                // Skip devices already found by GM filter
-                if (result.device.address !in found) onFound(result.device, result.rssi, false)
+                val advertisedUuids = result.scanRecord?.serviceUuids?.toSet() ?: emptySet()
+                val hasGmService = advertisedUuids.any { it in gmParcelUuids }
+                onFound(result.device, result.rssi, hasGmService)
             }
             override fun onScanFailed(errorCode: Int) {
                 _connectionState.value = BleConnectionState.Error("BLE scan failed: $errorCode")
                 onStopped()
             }
         }
-
-        // Run both scans in parallel — GM-filtered finds vehicle even without a name
-        scanner?.startScan(gmFilters, settings, gmCallback)
-        scanner?.startScan(null, settings, allCallback)
-
+        scanAllCallback = cb
+        leScanner.startScan(null, settings, cb)
         handler.postDelayed({ stopScan(); onStopped() }, 30_000)
     }
 
     fun scanForVehicle(targetAddress: String? = null, onFound: (BluetoothDevice) -> Unit) {
         if (!isBluetoothOn) { _connectionState.value = BleConnectionState.BluetoothOff; return }
         if (!hasScanPermission()) { _connectionState.value = BleConnectionState.PermissionDenied; return }
+
+        stopScan()
         _connectionState.value = BleConnectionState.Scanning
-        scanner = adapter.bluetoothLeScanner
+        val leScanner = adapter.bluetoothLeScanner ?: return
+        scanner = leScanner
 
         val filters = if (targetAddress != null)
             listOf(ScanFilter.Builder().setDeviceAddress(targetAddress).build())
@@ -144,7 +142,7 @@ class BleManager(private val context: Context) {
             .setScanMode(ScanSettings.SCAN_MODE_LOW_LATENCY)
             .build()
 
-        scanner?.startScan(filters, settings, object : ScanCallback() {
+        val cb = object : ScanCallback() {
             override fun onScanResult(callbackType: Int, result: ScanResult) {
                 stopScan()
                 onFound(result.device)
@@ -152,13 +150,16 @@ class BleManager(private val context: Context) {
             override fun onScanFailed(errorCode: Int) {
                 _connectionState.value = BleConnectionState.Error("BLE scan failed: $errorCode")
             }
-        })
-
+        }
+        scanAllCallback = cb
+        leScanner.startScan(filters, settings, cb)
         handler.postDelayed({ stopScan() }, 30_000)
     }
 
     fun stopScan() {
-        scanner?.stopScan(object : ScanCallback() {})
+        val cb = scanAllCallback ?: return
+        adapter.bluetoothLeScanner?.stopScan(cb)
+        scanAllCallback = null
         scanner = null
     }
 
