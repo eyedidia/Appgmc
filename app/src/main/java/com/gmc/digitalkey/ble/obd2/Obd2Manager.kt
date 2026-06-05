@@ -13,6 +13,8 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import java.net.InetSocketAddress
+import java.net.Socket
 
 @SuppressLint("MissingPermission")
 class Obd2Manager(private val context: Context) {
@@ -36,6 +38,23 @@ class Obd2Manager(private val context: Context) {
     // Classic Bluetooth (SPP) fields
     private var classicSocket: BluetoothSocket? = null
     private var isClassicMode = false
+
+    // Wi-Fi TCP fields (e.g. Basic OBD Coding Pro, ELM327 Wi-Fi dongles)
+    private var wifiSocket: Socket? = null
+    private var isWifiMode = false
+
+    companion object {
+        // Default for most Wi-Fi ELM327 adapters (Basic OBD Coding Pro, BAFX, Veepeak Wi-Fi)
+        const val WIFI_DEFAULT_HOST = "192.168.0.10"
+        const val WIFI_DEFAULT_PORT = 35000
+        // Alternative common addresses
+        val WIFI_FALLBACK_HOSTS = listOf(
+            "192.168.0.10" to 35000,
+            "192.168.4.1"  to 35000,
+            "192.168.0.1"  to 35000,
+            "10.0.0.1"     to 35000,
+        )
+    }
 
     // True when vehicle uses ISO 15765-4 CAN 29-bit (ATSP7) — e.g. Silverado EV 2025
     var use29BitCan = false
@@ -170,6 +189,95 @@ class Obd2Manager(private val context: Context) {
             }
             .toList()
 
+    // -- Wi-Fi TCP Connection (Basic OBD Coding Pro and similar LAN adapters)
+
+    fun connectWifi(host: String = WIFI_DEFAULT_HOST, port: Int = WIFI_DEFAULT_PORT) {
+        isWifiMode = true
+        isClassicMode = false
+        gatt?.close(); gatt = null; layout = null
+        runCatching { classicSocket?.close() }; classicSocket = null
+        _state.value = Obd2State.Connecting(null)
+        scope.launch {
+            runCatching { wifiSocket?.close() }
+            try {
+                val socket = Socket()
+                withContext(Dispatchers.IO) {
+                    socket.connect(InetSocketAddress(host, port), 8_000)
+                    socket.soTimeout = 10_000
+                }
+                wifiSocket = socket
+                launch { wifiReadLoop(socket) }
+                _state.value = Obd2State.AdapterFound(null)
+            } catch (e: Exception) {
+                isWifiMode = false
+                _state.value = Obd2State.Error(
+                    "Wi-Fi connect failed: ${e.message}\n\n" +
+                    "1. Connect phone to adapter's Wi-Fi (not home router)\n" +
+                    "2. Default address: $host:$port\n" +
+                    "3. Vehicle must have ignition ON"
+                )
+            }
+        }
+    }
+
+    /** Try all known Wi-Fi OBD2 addresses; connects to the first that responds. */
+    fun autoConnectWifi() {
+        isWifiMode = true
+        isClassicMode = false
+        gatt?.close(); gatt = null; layout = null
+        runCatching { classicSocket?.close() }; classicSocket = null
+        _state.value = Obd2State.Scanning
+        scope.launch {
+            runCatching { wifiSocket?.close() }
+            for ((host, port) in WIFI_FALLBACK_HOSTS) {
+                try {
+                    val socket = Socket()
+                    withContext(Dispatchers.IO) {
+                        socket.connect(InetSocketAddress(host, port), 2_000)
+                        socket.soTimeout = 10_000
+                    }
+                    wifiSocket = socket
+                    launch { wifiReadLoop(socket) }
+                    synchronized(_commandLog) {
+                        _commandLog.add("Wi-Fi" to "Connected to $host:$port")
+                    }
+                    _state.value = Obd2State.AdapterFound(null)
+                    return@launch
+                } catch (_: Exception) {
+                    synchronized(_commandLog) { _commandLog.add("Wi-Fi try" to "$host:$port — no response") }
+                }
+            }
+            isWifiMode = false
+            _state.value = Obd2State.Error(
+                "No Wi-Fi OBD2 adapter found.\n\n" +
+                "Tried: ${WIFI_FALLBACK_HOSTS.joinToString(", ") { "${it.first}:${it.second}" }}\n\n" +
+                "Connect phone to the adapter's Wi-Fi network first."
+            )
+        }
+    }
+
+    private suspend fun wifiReadLoop(socket: Socket) {
+        val buf = ByteArray(1024)
+        try {
+            while (true) {
+                val n = withContext(Dispatchers.IO) { socket.getInputStream().read(buf) }
+                if (n <= 0) break
+                val chunk = String(buf, 0, n, Charsets.US_ASCII)
+                rxBuffer.append(chunk)
+                if (rxBuffer.contains('>')) {
+                    val response = rxBuffer.toString().substringBefore('>').trim()
+                    rxBuffer.clear()
+                    pendingResponse?.complete(response)
+                    pendingResponse = null
+                }
+            }
+        } catch (e: Exception) {
+            _state.value = Obd2State.Disconnected
+            pendingResponse?.completeExceptionally(e)
+            pendingResponse = null
+        }
+    }
+
     // -- BLE Connection
 
     fun connect(device: BluetoothDevice) {
@@ -241,8 +349,11 @@ class Obd2Manager(private val context: Context) {
 
     fun disconnect() {
         scope.launch { runCatching { classicSocket?.close() } }
+        scope.launch { runCatching { wifiSocket?.close() } }
         classicSocket = null
+        wifiSocket = null
         isClassicMode = false
+        isWifiMode = false
         gatt?.disconnect()
         gatt?.close()
         gatt = null
@@ -259,7 +370,17 @@ class Obd2Manager(private val context: Context) {
     suspend fun sendCommand(cmd: String, timeoutMs: Long = 4_000): String = commandMutex.withLock {
         try {
             val response: String
-            if (isClassicMode) {
+            if (isWifiMode) {
+                val socket = wifiSocket ?: error("Not connected to Wi-Fi adapter")
+                rxBuffer.clear()
+                val deferred = CompletableDeferred<String>()
+                pendingResponse = deferred
+                withContext(Dispatchers.IO) {
+                    socket.getOutputStream().write((cmd + "\r").toByteArray(Charsets.US_ASCII))
+                    socket.getOutputStream().flush()
+                }
+                response = withTimeout(timeoutMs) { deferred.await() }
+            } else if (isClassicMode) {
                 val socket = classicSocket ?: error("Not connected to adapter")
                 rxBuffer.clear()
                 val deferred = CompletableDeferred<String>()

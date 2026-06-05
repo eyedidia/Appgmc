@@ -43,6 +43,10 @@ class Obd2ActivationFragment : Fragment() {
         arguments?.getString("vehicleId")?.let { viewModel.loadVehicleVin(it) }
 
         binding.btnStartScan.setOnClickListener { viewModel.startAdapterScan() }
+        binding.btnConnectWifiObd.setOnClickListener {
+            // Auto-detect: tries 192.168.0.10:35000 → 192.168.4.1:35000 → etc.
+            viewModel.connectWifiAdapter()
+        }
         binding.btnShowAllBle.setOnClickListener {
             binding.btnShowAllBle.visibility = View.GONE
             viewModel.showAllBleDevices()

@@ -120,6 +120,33 @@ class Obd2ActivationViewModel(app: Application) : AndroidViewModel(app) {
         _uiState.value = Obd2ActivationState.AdapterList(current)
     }
 
+    /** Connect to a Wi-Fi OBD2 adapter (Basic OBD Coding Pro, ELM327 Wi-Fi dongles).
+     *  Call after connecting phone to the adapter's Wi-Fi hotspot. */
+    fun connectWifiAdapter(host: String = Obd2Manager.WIFI_DEFAULT_HOST,
+                           port: Int = Obd2Manager.WIFI_DEFAULT_PORT) {
+        activeStepLog.clear()
+        _stepLog.value = emptyList()
+
+        // Try specified host first; if blank, auto-try all known addresses
+        if (host.isBlank()) {
+            obd2Manager.autoConnectWifi()
+        } else {
+            obd2Manager.connectWifi(host, port)
+        }
+
+        viewModelScope.launch {
+            val readyState = obd2Manager.state
+                .filter { it !is Obd2State.Scanning && it !is Obd2State.Connecting }
+                .first()
+            if (readyState is Obd2State.Error) {
+                _uiState.value = Obd2ActivationState.ActivationError(readyState.message)
+                return@launch
+            }
+            // Connected — run the same activation sequence as BLE/Classic
+            runActivationSequence()
+        }
+    }
+
     @SuppressLint("MissingPermission")
     fun connectAndActivate(device: BluetoothDevice) {
         activeStepLog.clear()

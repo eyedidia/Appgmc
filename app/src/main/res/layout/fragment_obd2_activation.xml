@@ -122,6 +122,14 @@
             android:layout_marginBottom="8dp" />
 
         <com.google.android.material.button.MaterialButton
+            android:id="@+id/btn_connect_wifi_obd"
+            style="@style/Widget.GMC.Button.Outlined"
+            android:layout_width="match_parent"
+            android:layout_height="52dp"
+            android:text="Connect via Wi-Fi OBD2 (Basic OBD Pro / ELM327 Wi-Fi)"
+            android:layout_marginBottom="8dp" />
+
+        <com.google.android.material.button.MaterialButton
             android:id="@+id/btn_show_all_ble"
             style="@style/Widget.GMC.Button.Outlined"
             android:layout_width="match_parent"
