@@ -9,7 +9,7 @@ object ChallengeResponseEngine {
     fun generateChallenge(): ByteArray = ByteArray(32).also { random.nextBytes(it) }
 
     fun signChallenge(vehicleId: String, challenge: ByteArray): ByteArray =
-        KeyCredentialStore.sign(vehicleId, challenge)
+        KeyCredentialStore.signWithEc(vehicleId, challenge)
 
     fun verify(vehicleId: String, challenge: ByteArray, signature: ByteArray): Boolean {
         val publicKey = KeyCredentialStore.getPublicKey(vehicleId) ?: return false

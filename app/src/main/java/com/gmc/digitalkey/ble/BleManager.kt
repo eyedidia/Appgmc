@@ -67,6 +67,7 @@ class BleManager(private val context: Context) {
     private var isPairingMode = false      // true = send PAIRING_REQUEST + pubkey, not challenge-response
     private var isDumpMode = false         // true = only dump GATT services, don't auth
     private var isProbeMode = false        // true = subscribe to 4CDABAA2 and log raw bytes
+    private var pairingPubKeyBytes: ByteArray? = null  // stored between sendPairingRequest and onMtuChanged
     private val probeLogs = mutableListOf<String>()
     private var reconnectAttempts = 0
     private val handler = Handler(Looper.getMainLooper())
@@ -315,6 +316,7 @@ class BleManager(private val context: Context) {
         isPairingMode = false
         isDumpMode = false
         isProbeMode = false
+        pairingPubKeyBytes = null
         synchronized(probeLogs) { probeLogs.clear() }
         gatt?.disconnect()
         gatt?.close()
@@ -374,7 +376,7 @@ class BleManager(private val context: Context) {
             }
 
             enableNotifications(gatt)
-            readChallenge(gatt)
+            // Authenticating state + challenge arrive via NOTIFY on 5E2A68A5 (set in onDescriptorWrite)
         }
 
         override fun onCharacteristicRead(gatt: BluetoothGatt, char: BluetoothGattCharacteristic, status: Int) {
@@ -411,14 +413,24 @@ class BleManager(private val context: Context) {
             }
             when (char.uuid) {
                 VehicleGattProfile.CHAR_SERVER_WRITE -> {
-                    // Single vehicle→phone channel: challenge, status, charging — all arrive here.
-                    // Parse message type from first byte once the protocol is reverse-engineered.
+                    val bytes = char.value ?: return
+                    val hex = bytes.joinToString(" ") { "%02X".format(it) }
+                    Log.i(TAG, "← 5E2A68A5 NOTIFY (${bytes.size}B): $hex")
                     if (isPairingMode) {
-                        // In pairing mode, handle as pairing response (same as onCharacteristicRead path)
-                        val hex = char.value?.joinToString(" ") { "%02X".format(it) } ?: "empty"
-                        Log.i(TAG, "Pairing NOTIFY from vehicle: $hex")
+                        // Vehicle responded to our PAIRING_REQUEST.
+                        // Protocol assumption: 0x00 or 0x21 in first byte = accepted.
+                        val first = bytes.firstOrNull()
+                        val ok = first == 0x00.toByte() || first == 0x21.toByte()
+                        isPairingMode = false
+                        pairingPubKeyBytes = null
+                        if (ok) {
+                            _connectionState.value = BleConnectionState.PairingSuccess(gatt.device)
+                        } else {
+                            _connectionState.value = BleConnectionState.PairingFailed(gatt.device, hex)
+                        }
+                        gatt.disconnect()
                     } else {
-                        handleChallenge(gatt, char.value)
+                        handleChallenge(gatt, bytes)
                     }
                 }
             }
@@ -426,16 +438,45 @@ class BleManager(private val context: Context) {
 
         override fun onCharacteristicWrite(gatt: BluetoothGatt, char: BluetoothGattCharacteristic, status: Int) {
             if (isPairingMode && char.uuid == VehicleGattProfile.CHAR_COMMAND) {
-                Log.i(TAG, "PAIRING_REQUEST write status: $status")
-                // After sending PAIRING_REQUEST, read the challenge/response characteristic
-                handler.postDelayed({
-                    val service = gatt.getService(VehicleGattProfile.SERVICE_UUID) ?: return@postDelayed
-                    val challengeChar = service.getCharacteristic(VehicleGattProfile.CHAR_CHALLENGE) ?: return@postDelayed
-                    gatt.readCharacteristic(challengeChar)
-                }, 500)
+                Log.i(TAG, "→ PAIRING_REQUEST written (status=$status), waiting for vehicle NOTIFY on 5E2A68A5…")
+                // Vehicle sends its response via NOTIFY on CHAR_SERVER_WRITE — handled in onCharacteristicChanged
             } else if (char.uuid == VehicleGattProfile.CHAR_RESPONSE && status == BluetoothGatt.GATT_SUCCESS) {
                 _connectionState.value = BleConnectionState.Ready(gatt.device)
             }
+        }
+
+        override fun onDescriptorWrite(gatt: BluetoothGatt, descriptor: BluetoothGattDescriptor, status: Int) {
+            if (status != BluetoothGatt.GATT_SUCCESS) {
+                Log.w(TAG, "CCCD write failed: $status")
+                return
+            }
+            if (isPairingMode) {
+                // NOTIFY subscription confirmed — now negotiate larger MTU before sending the public key
+                Log.i(TAG, "Pairing CCCD written OK → requesting MTU 185…")
+                gatt.requestMtu(185)
+            } else {
+                // Auth flow: vehicle will now send the challenge via NOTIFY on 5E2A68A5
+                Log.i(TAG, "Auth CCCD written OK → Authenticating, waiting for challenge NOTIFY…")
+                _connectionState.value = BleConnectionState.Authenticating(gatt.device)
+            }
+        }
+
+        override fun onMtuChanged(gatt: BluetoothGatt, mtu: Int, status: Int) {
+            if (!isPairingMode) return
+            val pubKeyBytes = pairingPubKeyBytes ?: return
+            val service = gatt.getService(VehicleGattProfile.SERVICE_UUID) ?: run {
+                performGattDump(gatt); return
+            }
+            val cmdChar = service.getCharacteristic(VehicleGattProfile.CHAR_COMMAND) ?: run {
+                performGattDump(gatt); return
+            }
+            val payload = byteArrayOf(VehicleGattProfile.Commands.PAIRING_REQUEST) +
+                          byteArrayOf(pubKeyBytes.size.toByte()) + pubKeyBytes
+            Log.i(TAG, "MTU=$mtu → sending PAIRING_REQUEST (${payload.size}B): " +
+                       payload.take(6).joinToString(" ") { "%02X".format(it) } + "…")
+            cmdChar.value = payload
+            cmdChar.writeType = BluetoothGattCharacteristic.WRITE_TYPE_DEFAULT
+            gatt.writeCharacteristic(cmdChar)
         }
 
         override fun onReadRemoteRssi(gatt: BluetoothGatt, rssi: Int, status: Int) {
@@ -454,32 +495,16 @@ class BleManager(private val context: Context) {
             _connectionState.value = BleConnectionState.PairingFailed(gatt.device, "no vehicleId")
             return
         }
-        val pubKeyBytes = KeyCredentialStore.getEcPublicKeyBytes(vehicleId)
-            ?: run {
-                _connectionState.value = BleConnectionState.PairingFailed(gatt.device, "no EC key")
-                return
-            }
-
-        val service = gatt.getService(VehicleGattProfile.SERVICE_UUID) ?: run {
-            // GM Digital Key service not found — dump available services for research
-            performGattDump(gatt)
+        val pubKeyBytes = KeyCredentialStore.getEcPublicKeyBytes(vehicleId) ?: run {
+            _connectionState.value = BleConnectionState.PairingFailed(gatt.device, "no EC key")
             return
         }
-        val cmdChar = service.getCharacteristic(VehicleGattProfile.CHAR_COMMAND) ?: run {
+        val service = gatt.getService(VehicleGattProfile.SERVICE_UUID) ?: run {
             performGattDump(gatt); return
         }
 
-        // Request MTU large enough for public key (65 bytes) + header
-        gatt.requestMtu(185)
-
-        // Payload: [PAIRING_REQUEST=0x20, key_len, ...EC_P256_pubkey_bytes...]
-        val payload = byteArrayOf(VehicleGattProfile.Commands.PAIRING_REQUEST) +
-                      byteArrayOf(pubKeyBytes.size.toByte()) + pubKeyBytes
-
-        _connectionState.value = BleConnectionState.PairingInProgress(gatt.device)
-        Log.i(TAG, "Sending PAIRING_REQUEST (${payload.size} bytes): ${payload.take(4).joinToString(" ") { "%02X".format(it) }}...")
-
-        // Subscribe to the single vehicle→phone characteristic (5E2A68A5) for pairing response
+        // Step 1: subscribe to NOTIFY on 5E2A68A5 so we receive the vehicle's pairing response.
+        // The actual payload write happens in onMtuChanged, after onDescriptorWrite → requestMtu(185).
         val serverChar = service.getCharacteristic(VehicleGattProfile.CHAR_SERVER_WRITE)
         if (serverChar != null) {
             gatt.setCharacteristicNotification(serverChar, true)
@@ -489,11 +514,10 @@ class BleManager(private val context: Context) {
             }
         }
 
-        handler.postDelayed({
-            cmdChar.value = payload
-            cmdChar.writeType = BluetoothGattCharacteristic.WRITE_TYPE_DEFAULT
-            gatt.writeCharacteristic(cmdChar)
-        }, 300)
+        // Store key bytes — used by onMtuChanged to build and send the pairing payload
+        pairingPubKeyBytes = pubKeyBytes
+        _connectionState.value = BleConnectionState.PairingInProgress(gatt.device)
+        Log.i(TAG, "Pairing: enabling NOTIFY on 5E2A68A5, then MTU, then PAIRING_REQUEST…")
     }
 
     // ─── Auth helpers ─────────────────────────────────────────────────────────
@@ -522,8 +546,10 @@ class BleManager(private val context: Context) {
 
     private fun handleChallenge(gatt: BluetoothGatt, challenge: ByteArray) {
         val vehicleId = currentVehicleId ?: return
+        Log.i(TAG, "Challenge (${challenge.size}B): ${challenge.joinToString(" ") { "%02X".format(it) }}")
         val signature = runCatching { ChallengeResponseEngine.signChallenge(vehicleId, challenge) }
-            .getOrNull() ?: return
+            .getOrElse { e -> Log.e(TAG, "Sign failed: $e"); return }
+        Log.i(TAG, "→ Response (${signature.size}B): ${signature.take(8).joinToString(" ") { "%02X".format(it) }}…")
         val service = gatt.getService(VehicleGattProfile.SERVICE_UUID) ?: return
         val char = service.getCharacteristic(VehicleGattProfile.CHAR_RESPONSE) ?: return
         char.value = signature
