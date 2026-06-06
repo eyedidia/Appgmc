@@ -589,6 +589,30 @@ class Obd2Manager(private val context: Context) {
             .map { it.toInt(16).toByte() }
             .toByteArray()
 
+    // Scan all non-standard GATT services for a characteristic with WRITE + separate NOTIFY,
+    // or a single characteristic that has both WRITE and NOTIFY (like FFE1).
+    private fun autoDetectGattLayout(gatt: BluetoothGatt): Elm327GattProfile.GattLayout? {
+        for (service in gatt.services) {
+            if (Elm327GattProfile.STANDARD_SERVICE_PREFIXES.any {
+                service.uuid.toString().lowercase().startsWith(it) }) continue
+            var writeChar: android.bluetooth.BluetoothGattCharacteristic? = null
+            var notifyChar: android.bluetooth.BluetoothGattCharacteristic? = null
+            for (ch in service.characteristics) {
+                val p = ch.properties
+                val canWrite = p and (android.bluetooth.BluetoothGattCharacteristic.PROPERTY_WRITE or
+                    android.bluetooth.BluetoothGattCharacteristic.PROPERTY_WRITE_NO_RESPONSE) != 0
+                val canNotify = p and android.bluetooth.BluetoothGattCharacteristic.PROPERTY_NOTIFY != 0
+                if (canWrite && canNotify)
+                    return Elm327GattProfile.GattLayout(ch.uuid, ch.uuid, service.uuid)
+                if (canWrite) writeChar = ch
+                if (canNotify) notifyChar = ch
+            }
+            if (writeChar != null && notifyChar != null)
+                return Elm327GattProfile.GattLayout(writeChar.uuid, notifyChar.uuid, service.uuid)
+        }
+        return null
+    }
+
     // -- GATT Callback
 
     private val gattCallback = object : BluetoothGattCallback() {
@@ -622,9 +646,26 @@ class Obd2Manager(private val context: Context) {
                         rxChar = Elm327GattProfile.CHAR_FFE1_RXTX,
                         serviceUuid = Elm327GattProfile.SERVICE_FFE0
                     )
+                gatt.getService(Elm327GattProfile.SERVICE_NUS) != null ->
+                    Elm327GattProfile.GattLayout(
+                        txChar = Elm327GattProfile.CHAR_NUS_TX,
+                        rxChar = Elm327GattProfile.CHAR_NUS_RX,
+                        serviceUuid = Elm327GattProfile.SERVICE_NUS
+                    )
                 else -> {
-                    _state.value = Obd2State.Error("Unknown adapter layout — not an ELM327?")
-                    return
+                    // Fallback: scan all non-standard services for a WRITE+NOTIFY pair
+                    autoDetectGattLayout(gatt) ?: run {
+                        val serviceList = gatt.services.joinToString(", ") {
+                            it.uuid.toString().uppercase().take(8)
+                        }
+                        _state.value = Obd2State.Error(
+                            "Adapter GATT profile not recognised.\n\n" +
+                            "Services: $serviceList\n\n" +
+                            "Supported: FFF0 (ELM327), FFE0 (clone), NUS (Nordic).\n" +
+                            "Try pairing the adapter in Android Bluetooth settings first."
+                        )
+                        return
+                    }
                 }
             }
             layout = discoveredLayout

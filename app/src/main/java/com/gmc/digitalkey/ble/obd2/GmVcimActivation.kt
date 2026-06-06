@@ -264,6 +264,35 @@ object GmVcimActivation {
                 delay(400)  // let ECU recover between failed routine attempts to avoid lockout
             }
 
+            // 2c. Programming session direct write — some ECUs allow F1A0 write in
+            //     programming session (10 02) without SecurityAccess. Quick to try.
+            run {
+                val progSess = try {
+                    manager.sendUds(vcimAddress, byteArrayOf(SVC_DIAGNOSTIC_SESSION, 0x02.toByte()))
+                } catch (_: Exception) { byteArrayOf() }
+                if (progSess.firstOrNull() == 0x50.toByte()) {
+                    stepLog += StepResult("ProgrammingSession $addrStr", true, "Accepted")
+                    val pw = try {
+                        manager.sendUds(vcimAddress,
+                            byteArrayOf(SVC_WRITE_DATA_BY_ID, 0xF1.toByte(), 0xA0.toByte(), 0x01.toByte()))
+                    } catch (_: Exception) { byteArrayOf() }
+                    when {
+                        pw.firstOrNull() == 0x6E.toByte() -> {
+                            stepLog += StepResult("Write F1A0 (prog session)", true, "BLE enabled!")
+                            return ActivationResult.Success(vcimAddress)
+                        }
+                        else -> stepLog += StepResult("Write F1A0 (prog session)", false,
+                            pw.getOrNull(2)?.let { "NRC 0x%02X — SA still required in prog session".format(it) }
+                            ?: "no response")
+                    }
+                    // Restore default session before SA attempts
+                    runCatching { manager.sendUds(vcimAddress, byteArrayOf(SVC_DIAGNOSTIC_SESSION, SESSION_DEFAULT)); delay(300) }
+                } else {
+                    stepLog += StepResult("ProgrammingSession $addrStr", false,
+                        progSess.getOrNull(2)?.let { "NRC 0x%02X".format(it) } ?: "not supported")
+                }
+            }
+
             // 3. SecurityAccess — request a FRESH seed before every key attempt.
             // After any failed key (NRC 0x13/0x35/0x24), the ECU resets its SecurityAccess
             // state and will return NRC 0x24 (sequence error) to any subsequent key without
@@ -336,6 +365,10 @@ object GmVcimActivation {
                     nrc == 0x35.toByte() ->
                         stepLog += StepResult("SecurityAccess L1 key $algName (${key.size}B)", false,
                             "NRC 0x35 — wrong key value — tried: ${key.toHex()}")
+                    keyResp.isEmpty() ->
+                        stepLog += StepResult("SecurityAccess L1 key $algName (${key.size}B)", false,
+                            "Adapter returned '?' — ELM327 clone cannot send ${key.size}-byte multi-frame commands. " +
+                            "Use OBDLink MX+ / vLinker MC+ adapter, or try DoIP via vehicle Wi-Fi.")
                     else ->
                         stepLog += StepResult("SecurityAccess L1 key $algName (${key.size}B)", false,
                             "${nrc?.let { "NRC 0x%02X".format(it) } ?: keyResp.toHex()} — tried: ${key.toHex()}")
@@ -400,6 +433,9 @@ object GmVcimActivation {
                         nrc == 0x35.toByte() ->
                             stepLog += StepResult("SecurityAccess L2 key $algName (${key.size}B)", false,
                                 "NRC 0x35 — wrong key value — tried: ${key.toHex()}")
+                        keyResp.isEmpty() ->
+                            stepLog += StepResult("SecurityAccess L2 key $algName (${key.size}B)", false,
+                                "Adapter returned '?' — cannot send ${key.size}-byte multi-frame command.")
                         else ->
                             stepLog += StepResult("SecurityAccess L2 key $algName (${key.size}B)", false,
                                 "${nrc?.let { "NRC 0x%02X".format(it) } ?: keyResp.toHex()} — tried: ${key.toHex()}")
