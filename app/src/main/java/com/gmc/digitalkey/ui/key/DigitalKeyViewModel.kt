@@ -30,6 +30,10 @@ data class ScannedDevice(
 class DigitalKeyViewModel(app: Application) : AndroidViewModel(app) {
 
     val bleManager = BleManager(app)
+
+    companion object {
+        private const val MAX_SCAN_RESULTS = 80
+    }
     private val db = AppDatabase.get(app)
 
     val connectionState: StateFlow<BleConnectionState> = bleManager.connectionState
@@ -71,12 +75,11 @@ class DigitalKeyViewModel(app: Application) : AndroidViewModel(app) {
                 val current = _scanResults.value.toMutableList()
                 val idx = current.indexOfFirst { it.device.address == device.address }
                 if (idx >= 0) {
-                    // Upgrade hasGmService flag if newly confirmed; update RSSI
                     val prev = current[idx]
                     current[idx] = prev.copy(rssi = rssi,
                         hasGmService = prev.hasGmService || hasGmService,
                         name = if (hasGmService && prev.name == prev.device.address) name else prev.name)
-                } else {
+                } else if (current.size < MAX_SCAN_RESULTS) {
                     current.add(ScannedDevice(device, rssi, name, hasGmService))
                 }
                 _scanResults.value = current
@@ -126,10 +129,8 @@ class DigitalKeyViewModel(app: Application) : AndroidViewModel(app) {
                 val current = _rawDevices.value.toMutableList()
                 val idx = current.indexOfFirst { it.address == advert.address }
                 val isNew = idx < 0
-                if (idx >= 0) current[idx] = advert else current.add(advert)
-                current.sortByDescending { it.rssi }
+                if (idx >= 0) current[idx] = advert else if (current.size < MAX_SCAN_RESULTS) current.add(advert)
                 _rawDevices.value = current
-                // Fire alert the first time we see a GM device (0x005D manufacturer ID)
                 if (isNew && advert.isGm) _gmAlert.tryEmit(GmDeviceAlert(advert))
             },
             onStopped = { _isRawScanning.value = false }

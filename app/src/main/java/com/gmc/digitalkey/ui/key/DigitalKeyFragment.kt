@@ -30,6 +30,7 @@ import com.gmc.digitalkey.databinding.FragmentDigitalKeyBinding
 import com.gmc.digitalkey.db.VehicleEntity
 import com.journeyapps.barcodescanner.ScanContract
 import com.journeyapps.barcodescanner.ScanOptions
+import kotlinx.coroutines.flow.sample
 import kotlinx.coroutines.launch
 
 class DigitalKeyFragment : Fragment() {
@@ -120,7 +121,7 @@ class DigitalKeyFragment : Fragment() {
             }
         }
         viewLifecycleOwner.lifecycleScope.launch {
-            viewModel.rawDevices.collect { devices -> updateRawDevicesList(devices) }
+            viewModel.rawDevices.sample(300).collect { devices -> updateRawDevicesList(devices) }
         }
         viewLifecycleOwner.lifecycleScope.launch {
             viewModel.gmAlert.collect { alert ->

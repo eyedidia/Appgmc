@@ -28,6 +28,7 @@ import com.gmc.digitalkey.vin.VinInfo
 import com.journeyapps.barcodescanner.ScanContract
 import com.journeyapps.barcodescanner.ScanOptions
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.flow.sample
 import kotlinx.coroutines.launch
 
 class VehicleSelectFragment : Fragment() {
@@ -285,7 +286,7 @@ class VehicleSelectFragment : Fragment() {
         }
 
         viewLifecycleOwner.lifecycleScope.launch {
-            viewModel.scanResults.collect { results ->
+            viewModel.scanResults.sample(300).collect { results ->
                 val shown = applyFilters(results).size
                 val total = results.size
                 binding.scanStatusText.text = when {
