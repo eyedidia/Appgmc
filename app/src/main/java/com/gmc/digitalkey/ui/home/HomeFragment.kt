@@ -1,23 +1,27 @@
 package com.gmc.digitalkey.ui.home
 
 import android.content.Intent
-import androidx.navigation.fragment.findNavController
-import coil.load
 import android.os.Bundle
 import android.provider.Settings
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import android.view.animation.AnimationUtils
+import android.widget.ImageView
+import android.widget.LinearLayout
+import android.widget.TextView
 import androidx.fragment.app.Fragment
 import androidx.fragment.app.viewModels
 import androidx.lifecycle.lifecycleScope
-import com.google.android.material.dialog.MaterialAlertDialogBuilder
+import androidx.navigation.fragment.findNavController
+import coil.load
 import com.gmc.digitalkey.R
 import com.gmc.digitalkey.ble.BleConnectionState
 import com.gmc.digitalkey.databinding.FragmentHomeBinding
 import com.gmc.digitalkey.model.LockState
 import com.gmc.digitalkey.model.PairedVehicle
+import com.google.android.material.card.MaterialCardView
+import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import kotlinx.coroutines.launch
 
 class HomeFragment : Fragment() {
@@ -47,7 +51,7 @@ class HomeFragment : Fragment() {
         binding.errorActionBtn.setOnClickListener {
             startActivity(Intent(Settings.ACTION_BLUETOOTH_SETTINGS))
         }
-        binding.vehicleSelector.setOnClickListener {
+        binding.vehicleHeroCard.setOnClickListener {
             showVehiclePicker()
         }
         binding.btnSetupGuide.setOnClickListener {
@@ -81,8 +85,11 @@ class HomeFragment : Fragment() {
     private fun observeState() {
         viewLifecycleOwner.lifecycleScope.launch {
             viewModel.pairedVehicles.collect { vehicles ->
-                binding.vehicleSwitchHint.visibility =
-                    if (vehicles.size > 1) View.VISIBLE else View.GONE
+                val hasMultiple = vehicles.size > 1
+                binding.vehicleSwitchHint.visibility = if (hasMultiple) View.VISIBLE else View.GONE
+                binding.vehiclesSectionLabel.visibility = if (hasMultiple) View.VISIBLE else View.GONE
+                binding.vehiclesScroll.visibility = if (hasMultiple) View.VISIBLE else View.GONE
+                if (hasMultiple) renderVehicleCards(vehicles)
             }
         }
 
@@ -90,13 +97,19 @@ class HomeFragment : Fragment() {
             viewModel.activeVehicle.collect { vehicle ->
                 if (vehicle == null) {
                     binding.noVehicleText.visibility = View.VISIBLE
-                    binding.vehicleSelector.visibility = View.GONE
+                    binding.vehicleHeroCard.visibility = View.GONE
                     binding.actionButtons.visibility = View.GONE
                 } else {
                     binding.noVehicleText.visibility = View.GONE
-                    binding.vehicleSelector.visibility = View.VISIBLE
+                    binding.vehicleHeroCard.visibility = View.VISIBLE
                     binding.actionButtons.visibility = View.VISIBLE
                     binding.vehicleName.text = vehicle.displayName
+                    if (vehicle.vin.length >= 6) {
+                        binding.vehicleVinBadge.visibility = View.VISIBLE
+                        binding.vehicleVinBadge.text = "· ${vehicle.vin.takeLast(6)}"
+                    } else {
+                        binding.vehicleVinBadge.visibility = View.GONE
+                    }
                     if (vehicle.imageUrl.isNotEmpty()) {
                         binding.vehicleImage.load(vehicle.imageUrl) {
                             crossfade(true)
@@ -122,13 +135,11 @@ class HomeFragment : Fragment() {
         viewLifecycleOwner.lifecycleScope.launch {
             viewModel.vehicleState.collect { state ->
                 state ?: return@collect
-                // Lock state
                 binding.lockStateText.text = when (state.lockState) {
                     LockState.LOCKED -> getString(R.string.vehicle_locked)
                     LockState.UNLOCKED -> getString(R.string.vehicle_unlocked)
                     LockState.UNKNOWN -> getString(R.string.vehicle_status_unknown)
                 }
-                // SOC
                 val soc = state.chargingState.socPercent
                 if (soc >= 0) {
                     binding.socText.visibility = View.VISIBLE
@@ -137,6 +148,42 @@ class HomeFragment : Fragment() {
                     binding.socText.visibility = View.GONE
                 }
             }
+        }
+    }
+
+    private fun renderVehicleCards(vehicles: List<PairedVehicle>) {
+        binding.vehiclesContainer.removeAllViews()
+        val activeId = viewModel.activeVehicle.value?.id
+        val inflater = LayoutInflater.from(requireContext())
+        val marginPx = (12 * resources.displayMetrics.density).toInt()
+        val strokePx = (2 * resources.displayMetrics.density).toInt()
+
+        vehicles.forEach { vehicle ->
+            val card = inflater.inflate(R.layout.item_vehicle_card, binding.vehiclesContainer, false) as MaterialCardView
+            if (vehicle.id == activeId) {
+                card.strokeWidth = strokePx
+                card.strokeColor = requireContext().getColor(R.color.gmc_red)
+            }
+            val params = card.layoutParams as LinearLayout.LayoutParams
+            params.marginEnd = marginPx
+            card.layoutParams = params
+
+            card.findViewById<TextView>(R.id.mini_vehicle_name).text = vehicle.displayName
+            val vinView = card.findViewById<TextView>(R.id.mini_vehicle_vin)
+            if (vehicle.vin.length >= 6) {
+                vinView.visibility = View.VISIBLE
+                vinView.text = vehicle.vin.takeLast(6)
+            }
+            val imageView = card.findViewById<ImageView>(R.id.mini_vehicle_image)
+            if (vehicle.imageUrl.isNotEmpty()) {
+                imageView.load(vehicle.imageUrl) {
+                    crossfade(true)
+                    placeholder(R.drawable.ic_car_hummer)
+                    error(R.drawable.ic_car_hummer)
+                }
+            }
+            card.setOnClickListener { viewModel.selectVehicle(vehicle.id) }
+            binding.vehiclesContainer.addView(card)
         }
     }
 
@@ -163,7 +210,6 @@ class HomeFragment : Fragment() {
         binding.bleStatusText.setTextColor(requireContext().getColor(color))
         binding.bleIcon.setColorFilter(requireContext().getColor(color))
 
-        // Error banner
         when (state) {
             is BleConnectionState.BluetoothOff -> {
                 binding.errorBanner.visibility = View.VISIBLE
@@ -179,10 +225,11 @@ class HomeFragment : Fragment() {
             else -> binding.errorBanner.visibility = View.GONE
         }
 
-        // Disable buttons when not ready
         val enabled = state.isReady
         binding.btnLock.isEnabled = enabled
+        binding.btnLock.alpha = if (enabled) 1f else 0.4f
         binding.btnUnlock.isEnabled = enabled
+        binding.btnUnlock.alpha = if (enabled) 1f else 0.4f
     }
 
     override fun onDestroyView() {

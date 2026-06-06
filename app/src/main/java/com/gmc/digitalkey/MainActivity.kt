@@ -44,7 +44,7 @@ class MainActivity : AppCompatActivity() {
         // Stamp version into drawer header
         navView.getHeaderView(0)
             .findViewById<TextView>(R.id.navHeaderVersion)
-            ?.text = "v${BuildConfig.VERSION_NAME}  #${BuildConfig.VERSION_CODE}  ·  GM Digital Key Tool"
+            ?.text = "v${BuildConfig.VERSION_NAME}  #${BuildConfig.VERSION_CODE}  ·  ${getString(R.string.app_full_name)}"
 
         // Hamburger button opens the drawer
         binding.btnHamburger.setOnClickListener {

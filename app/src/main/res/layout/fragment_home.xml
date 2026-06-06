@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<androidx.constraintlayout.widget.ConstraintLayout
+<androidx.core.widget.NestedScrollView
     xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     xmlns:tools="http://schemas.android.com/tools"
@@ -7,311 +7,406 @@
     android:layout_height="match_parent"
     android:background="@color/bg_primary">
 
-    <!-- GMC Logo top-left -->
-    <ImageView
-        android:id="@+id/gmc_logo"
-        android:layout_width="wrap_content"
-        android:layout_height="40dp"
-        android:src="@drawable/ic_gmc_logo"
-        android:contentDescription="GMC"
-        app:layout_constraintTop_toTopOf="parent"
-        app:layout_constraintStart_toStartOf="parent"
-        android:layout_marginTop="16dp"
-        android:layout_marginStart="20dp" />
-
-    <!-- BLE status chip top-right -->
     <LinearLayout
-        android:id="@+id/ble_status_container"
-        android:layout_width="wrap_content"
+        android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:orientation="horizontal"
-        android:gravity="center_vertical"
-        android:background="@color/bg_card"
-        android:padding="8dp"
-        app:layout_constraintTop_toTopOf="parent"
-        app:layout_constraintEnd_toEndOf="parent"
-        android:layout_marginTop="16dp"
-        android:layout_marginEnd="20dp">
+        android:orientation="vertical"
+        android:paddingBottom="24dp">
 
-        <ImageView
-            android:id="@+id/ble_icon"
-            android:layout_width="16dp"
-            android:layout_height="16dp"
-            android:src="@drawable/ic_ble"
-            android:contentDescription="BLE" />
+        <!-- Top bar: GMC logo + BLE chip -->
+        <RelativeLayout
+            android:layout_width="match_parent"
+            android:layout_height="56dp"
+            android:paddingStart="20dp"
+            android:paddingEnd="20dp">
 
-        <TextView
-            android:id="@+id/ble_status_text"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="@string/ble_disconnected"
-            android:textColor="@color/text_secondary"
-            android:textSize="12sp"
-            android:layout_marginStart="4dp"
-            tools:text="Connected" />
-    </LinearLayout>
+            <ImageView
+                android:id="@+id/gmc_logo"
+                android:layout_width="wrap_content"
+                android:layout_height="32dp"
+                android:src="@drawable/ic_gmc_logo"
+                android:contentDescription="GMC"
+                android:layout_centerVertical="true"
+                android:layout_alignParentStart="true" />
 
-    <!-- Vehicle selector (tappable row) -->
-    <LinearLayout
-        android:id="@+id/vehicle_selector"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:orientation="horizontal"
-        android:gravity="center_vertical"
-        android:padding="8dp"
-        android:background="?attr/selectableItemBackground"
-        android:clickable="true"
-        android:focusable="true"
-        app:layout_constraintTop_toBottomOf="@id/gmc_logo"
-        app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintEnd_toEndOf="parent"
-        android:layout_marginTop="24dp">
+            <LinearLayout
+                android:id="@+id/ble_status_container"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:gravity="center_vertical"
+                android:background="@color/bg_card"
+                android:paddingStart="10dp"
+                android:paddingEnd="10dp"
+                android:paddingTop="6dp"
+                android:paddingBottom="6dp"
+                android:layout_centerVertical="true"
+                android:layout_alignParentEnd="true">
 
-        <TextView
-            android:id="@+id/vehicle_name"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="Hummer EV Pickup"
-            android:textColor="@color/text_primary"
-            android:textSize="22sp"
-            android:fontFamily="sans-serif-medium"
-            tools:text="Hummer EV Pickup" />
+                <ImageView
+                    android:id="@+id/ble_icon"
+                    android:layout_width="14dp"
+                    android:layout_height="14dp"
+                    android:src="@drawable/ic_ble"
+                    android:contentDescription="BLE" />
 
-        <TextView
-            android:id="@+id/vehicle_switch_hint"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text=" ▾"
-            android:textColor="@color/text_hint"
-            android:textSize="18sp"
-            android:visibility="gone" />
+                <TextView
+                    android:id="@+id/ble_status_text"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="@string/ble_disconnected"
+                    android:textColor="@color/text_secondary"
+                    android:textSize="11sp"
+                    android:layout_marginStart="4dp"
+                    tools:text="Connected" />
 
-    </LinearLayout>
+            </LinearLayout>
 
-    <!-- Vehicle silhouette -->
-    <ImageView
-        android:id="@+id/vehicle_image"
-        android:layout_width="0dp"
-        android:layout_height="120dp"
-        android:src="@drawable/ic_car_hummer"
-        android:contentDescription="Vehicle"
-        android:scaleType="fitCenter"
-        app:layout_constraintTop_toBottomOf="@id/vehicle_selector"
-        app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintEnd_toEndOf="parent"
-        android:layout_marginTop="16dp"
-        android:layout_marginStart="16dp"
-        android:layout_marginEnd="16dp" />
+        </RelativeLayout>
 
-    <!-- Lock state + SOC badge -->
-    <LinearLayout
-        android:id="@+id/status_row"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:orientation="horizontal"
-        android:gravity="center_vertical"
-        app:layout_constraintTop_toBottomOf="@id/vehicle_image"
-        app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintEnd_toEndOf="parent"
-        android:layout_marginTop="12dp">
-
-        <TextView
-            android:id="@+id/lock_state_text"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="@string/vehicle_status_unknown"
-            android:textColor="@color/text_secondary"
-            android:textSize="16sp"
-            tools:text="Locked" />
-
-        <View
-            android:layout_width="1dp"
-            android:layout_height="16dp"
-            android:background="@color/divider"
-            android:layout_marginStart="12dp"
-            android:layout_marginEnd="12dp" />
-
-        <TextView
-            android:id="@+id/soc_text"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:textColor="@color/status_connected"
-            android:textSize="16sp"
+        <!-- Vehicle hero card -->
+        <com.google.android.material.card.MaterialCardView
+            android:id="@+id/vehicle_hero_card"
+            android:layout_width="match_parent"
+            android:layout_height="220dp"
+            android:layout_marginStart="16dp"
+            android:layout_marginEnd="16dp"
+            android:layout_marginTop="8dp"
+            android:clickable="true"
+            android:focusable="true"
             android:visibility="gone"
-            tools:text="87%" />
+            app:cardCornerRadius="16dp"
+            app:cardBackgroundColor="@color/bg_card"
+            app:cardElevation="4dp">
 
-    </LinearLayout>
+            <FrameLayout
+                android:layout_width="match_parent"
+                android:layout_height="match_parent">
 
-    <!-- 4 Action Buttons -->
-    <LinearLayout
-        android:id="@+id/action_buttons"
-        android:layout_width="0dp"
-        android:layout_height="wrap_content"
-        android:orientation="horizontal"
-        android:gravity="center"
-        android:layout_marginStart="16dp"
-        android:layout_marginEnd="16dp"
-        android:layout_marginTop="32dp"
-        app:layout_constraintTop_toBottomOf="@id/status_row"
-        app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintEnd_toEndOf="parent">
+                <ImageView
+                    android:id="@+id/vehicle_image"
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    android:scaleType="centerCrop"
+                    android:src="@drawable/ic_car_hummer"
+                    android:contentDescription="Vehicle" />
 
-        <!-- Lock -->
+                <!-- Transparent-top to dark-bottom gradient -->
+                <View
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    android:background="@drawable/gradient_vehicle_card" />
+
+                <!-- SOC badge top-right -->
+                <TextView
+                    android:id="@+id/soc_text"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_gravity="top|end"
+                    android:layout_margin="12dp"
+                    android:background="@drawable/bg_badge_dark"
+                    android:paddingStart="8dp"
+                    android:paddingEnd="8dp"
+                    android:paddingTop="4dp"
+                    android:paddingBottom="4dp"
+                    android:textColor="@color/status_connected"
+                    android:textSize="13sp"
+                    android:fontFamily="sans-serif-medium"
+                    android:visibility="gone"
+                    tools:text="87%" />
+
+                <!-- Lock state badge top-left -->
+                <TextView
+                    android:id="@+id/lock_state_text"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_gravity="top|start"
+                    android:layout_margin="12dp"
+                    android:background="@drawable/bg_badge_dark"
+                    android:paddingStart="8dp"
+                    android:paddingEnd="8dp"
+                    android:paddingTop="4dp"
+                    android:paddingBottom="4dp"
+                    android:textColor="@color/text_primary"
+                    android:textSize="13sp"
+                    android:text="@string/vehicle_status_unknown"
+                    tools:text="Locked" />
+
+                <!-- Bottom: name, VIN, switch hint -->
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_gravity="bottom|start"
+                    android:orientation="vertical"
+                    android:padding="16dp">
+
+                    <TextView
+                        android:id="@+id/vehicle_name"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:textColor="@color/text_primary"
+                        android:textSize="20sp"
+                        android:fontFamily="sans-serif-medium"
+                        android:shadowColor="@color/bg_primary"
+                        android:shadowDx="0"
+                        android:shadowDy="1"
+                        android:shadowRadius="4"
+                        tools:text="Hummer EV Pickup" />
+
+                    <LinearLayout
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:orientation="horizontal"
+                        android:gravity="center_vertical"
+                        android:layout_marginTop="2dp">
+
+                        <TextView
+                            android:id="@+id/vehicle_vin_badge"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:textColor="@color/text_hint"
+                            android:textSize="11sp"
+                            android:fontFamily="monospace"
+                            android:visibility="gone"
+                            tools:text="· 400190" />
+
+                        <TextView
+                            android:id="@+id/vehicle_switch_hint"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="  ▾ tap to switch"
+                            android:textColor="@color/text_hint"
+                            android:textSize="11sp"
+                            android:visibility="gone" />
+
+                    </LinearLayout>
+
+                </LinearLayout>
+
+            </FrameLayout>
+
+        </com.google.android.material.card.MaterialCardView>
+
+        <!-- Lock / Unlock action cards -->
         <LinearLayout
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:layout_weight="1"
-            android:orientation="vertical"
-            android:gravity="center">
-            <com.google.android.material.button.MaterialButton
-                android:id="@+id/btn_lock"
-                style="@style/Widget.GMC.Button.Circular"
-                android:layout_width="72dp"
-                android:layout_height="72dp"
-                android:insetTop="0dp"
-                android:insetBottom="0dp"
-                app:icon="@drawable/ic_lock"
-                app:iconGravity="textStart"
-                app:iconSize="28dp"
-                app:iconPadding="0dp"
-                android:text="" />
-            <TextView
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="@string/action_lock"
-                android:textColor="@color/text_secondary"
-                android:textSize="12sp"
-                android:layout_marginTop="6dp" />
-        </LinearLayout>
-
-        <!-- Unlock -->
-        <LinearLayout
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:layout_weight="1"
-            android:orientation="vertical"
-            android:gravity="center">
-            <com.google.android.material.button.MaterialButton
-                android:id="@+id/btn_unlock"
-                style="@style/Widget.GMC.Button.Circular"
-                android:layout_width="72dp"
-                android:layout_height="72dp"
-                android:insetTop="0dp"
-                android:insetBottom="0dp"
-                app:icon="@drawable/ic_unlock"
-                app:iconGravity="textStart"
-                app:iconSize="28dp"
-                app:iconPadding="0dp"
-                android:text="" />
-            <TextView
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="@string/action_unlock"
-                android:textColor="@color/text_secondary"
-                android:textSize="12sp"
-                android:layout_marginTop="6dp" />
-        </LinearLayout>
-
-    </LinearLayout>
-
-    <!-- BLE error banner -->
-    <com.google.android.material.card.MaterialCardView
-        android:id="@+id/error_banner"
-        android:layout_width="0dp"
-        android:layout_height="wrap_content"
-        android:layout_marginStart="16dp"
-        android:layout_marginEnd="16dp"
-        android:layout_marginTop="20dp"
-        android:visibility="gone"
-        app:cardBackgroundColor="@color/bg_card"
-        app:strokeColor="@color/status_error"
-        app:strokeWidth="1dp"
-        app:cardCornerRadius="8dp"
-        app:layout_constraintTop_toBottomOf="@id/action_buttons"
-        app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintEnd_toEndOf="parent">
-        <LinearLayout
+            android:id="@+id/action_buttons"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:orientation="horizontal"
-            android:padding="12dp"
-            android:gravity="center_vertical">
-            <TextView
-                android:id="@+id/error_text"
+            android:layout_marginStart="16dp"
+            android:layout_marginEnd="16dp"
+            android:layout_marginTop="12dp"
+            android:visibility="gone">
+
+            <com.google.android.material.card.MaterialCardView
+                android:id="@+id/btn_lock"
                 android:layout_width="0dp"
-                android:layout_height="wrap_content"
+                android:layout_height="100dp"
                 android:layout_weight="1"
-                android:textColor="@color/status_error"
-                android:textSize="14sp"
-                tools:text="Vehicle out of range" />
-            <com.google.android.material.button.MaterialButton
-                android:id="@+id/error_action_btn"
-                style="@style/Widget.MaterialComponents.Button.TextButton"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="@string/ble_off_action"
-                android:textColor="@color/gmc_red" />
+                android:layout_marginEnd="6dp"
+                android:clickable="true"
+                android:focusable="true"
+                app:cardBackgroundColor="@color/bg_card"
+                app:cardCornerRadius="16dp"
+                app:cardElevation="2dp">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    android:orientation="vertical"
+                    android:gravity="center">
+
+                    <ImageView
+                        android:layout_width="32dp"
+                        android:layout_height="32dp"
+                        android:src="@drawable/ic_lock"
+                        android:contentDescription="Lock" />
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="@string/action_lock"
+                        android:textColor="@color/text_primary"
+                        android:textSize="14sp"
+                        android:layout_marginTop="8dp" />
+
+                </LinearLayout>
+
+            </com.google.android.material.card.MaterialCardView>
+
+            <com.google.android.material.card.MaterialCardView
+                android:id="@+id/btn_unlock"
+                android:layout_width="0dp"
+                android:layout_height="100dp"
+                android:layout_weight="1"
+                android:layout_marginStart="6dp"
+                android:clickable="true"
+                android:focusable="true"
+                app:cardBackgroundColor="@color/gmc_red_dark"
+                app:strokeColor="@color/gmc_red"
+                app:strokeWidth="1dp"
+                app:cardCornerRadius="16dp"
+                app:cardElevation="2dp">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    android:orientation="vertical"
+                    android:gravity="center">
+
+                    <ImageView
+                        android:layout_width="32dp"
+                        android:layout_height="32dp"
+                        android:src="@drawable/ic_unlock"
+                        android:contentDescription="Unlock" />
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="@string/action_unlock"
+                        android:textColor="@color/text_primary"
+                        android:textSize="14sp"
+                        android:layout_marginTop="8dp" />
+
+                </LinearLayout>
+
+            </com.google.android.material.card.MaterialCardView>
+
         </LinearLayout>
-    </com.google.android.material.card.MaterialCardView>
 
-    <!-- No vehicle paired — setup guide card -->
-    <com.google.android.material.card.MaterialCardView
-        android:id="@+id/no_vehicle_text"
-        android:layout_width="0dp"
-        android:layout_height="wrap_content"
-        android:layout_marginStart="24dp"
-        android:layout_marginEnd="24dp"
-        android:visibility="gone"
-        app:cardBackgroundColor="@color/bg_card"
-        app:strokeColor="@color/gmc_red"
-        app:strokeWidth="1dp"
-        app:cardCornerRadius="12dp"
-        app:layout_constraintTop_toTopOf="parent"
-        app:layout_constraintBottom_toBottomOf="parent"
-        app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintEnd_toEndOf="parent">
+        <!-- Multi-vehicle switcher -->
+        <TextView
+            android:id="@+id/vehicles_section_label"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="20dp"
+            android:layout_marginTop="24dp"
+            android:layout_marginBottom="8dp"
+            android:text="MY VEHICLES"
+            android:textColor="@color/text_secondary"
+            android:textSize="11sp"
+            android:letterSpacing="0.12"
+            android:fontFamily="sans-serif-medium"
+            android:visibility="gone" />
 
-        <LinearLayout
+        <HorizontalScrollView
+            android:id="@+id/vehicles_scroll"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:orientation="vertical"
-            android:padding="20dp"
-            android:gravity="center">
+            android:scrollbars="none"
+            android:paddingStart="16dp"
+            android:paddingEnd="16dp"
+            android:clipToPadding="false"
+            android:visibility="gone">
 
-            <TextView
+            <LinearLayout
+                android:id="@+id/vehicles_container"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="No Vehicle Paired"
-                android:textColor="@color/text_primary"
-                android:textSize="18sp"
-                android:fontFamily="sans-serif-medium"
-                android:layout_marginBottom="8dp" />
+                android:orientation="horizontal" />
 
-            <TextView
-                android:layout_width="wrap_content"
+        </HorizontalScrollView>
+
+        <!-- BLE error banner -->
+        <com.google.android.material.card.MaterialCardView
+            android:id="@+id/error_banner"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="16dp"
+            android:layout_marginEnd="16dp"
+            android:layout_marginTop="16dp"
+            android:visibility="gone"
+            app:cardBackgroundColor="@color/bg_card"
+            app:strokeColor="@color/status_error"
+            app:strokeWidth="1dp"
+            app:cardCornerRadius="8dp">
+
+            <LinearLayout
+                android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:text="Before pairing, you need to activate OnStar and enable Digital Key from your vehicle's infotainment screen."
-                android:textColor="@color/text_secondary"
-                android:textSize="14sp"
-                android:gravity="center"
-                android:layout_marginBottom="20dp" />
+                android:orientation="horizontal"
+                android:padding="12dp"
+                android:gravity="center_vertical">
 
-            <com.google.android.material.button.MaterialButton
-                android:id="@+id/btn_setup_guide"
-                style="@style/Widget.GMC.Button"
+                <TextView
+                    android:id="@+id/error_text"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:textColor="@color/status_error"
+                    android:textSize="14sp"
+                    tools:text="Vehicle out of range" />
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/error_action_btn"
+                    style="@style/Widget.MaterialComponents.Button.TextButton"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="@string/ble_off_action"
+                    android:textColor="@color/gmc_red" />
+
+            </LinearLayout>
+
+        </com.google.android.material.card.MaterialCardView>
+
+        <!-- No vehicle paired — setup guide card -->
+        <com.google.android.material.card.MaterialCardView
+            android:id="@+id/no_vehicle_text"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="24dp"
+            android:layout_marginEnd="24dp"
+            android:layout_marginTop="48dp"
+            android:visibility="gone"
+            app:cardBackgroundColor="@color/bg_card"
+            app:strokeColor="@color/gmc_red"
+            app:strokeWidth="1dp"
+            app:cardCornerRadius="12dp">
+
+            <LinearLayout
                 android:layout_width="match_parent"
-                android:layout_height="48dp"
-                android:text="Show Setup Guide" />
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:padding="20dp"
+                android:gravity="center">
 
-            <com.google.android.material.button.MaterialButton
-                android:id="@+id/btn_go_pair_direct"
-                style="@style/Widget.GMC.Button.Outlined"
-                android:layout_width="match_parent"
-                android:layout_height="48dp"
-                android:layout_marginTop="8dp"
-                android:text="Skip — Scan Now" />
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="No Vehicle Paired"
+                    android:textColor="@color/text_primary"
+                    android:textSize="18sp"
+                    android:fontFamily="sans-serif-medium"
+                    android:layout_marginBottom="8dp" />
 
-        </LinearLayout>
-    </com.google.android.material.card.MaterialCardView>
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Before pairing, you need to activate OnStar and enable Digital Key from your vehicle\'s infotainment screen."
+                    android:textColor="@color/text_secondary"
+                    android:textSize="14sp"
+                    android:gravity="center"
+                    android:layout_marginBottom="20dp" />
 
-</androidx.constraintlayout.widget.ConstraintLayout>
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btn_setup_guide"
+                    style="@style/Widget.GMC.Button"
+                    android:layout_width="match_parent"
+                    android:layout_height="48dp"
+                    android:text="Show Setup Guide" />
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btn_go_pair_direct"
+                    style="@style/Widget.GMC.Button.Outlined"
+                    android:layout_width="match_parent"
+                    android:layout_height="48dp"
+                    android:layout_marginTop="8dp"
+                    android:text="Skip — Scan Now" />
+
+            </LinearLayout>
+
+        </com.google.android.material.card.MaterialCardView>
+
+    </LinearLayout>
+
+</androidx.core.widget.NestedScrollView>
