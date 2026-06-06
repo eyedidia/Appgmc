@@ -1,9 +1,11 @@
 package com.gmc.digitalkey.ui.research
 
+import android.app.Activity
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
-import android.net.wifi.WifiManager
+import android.content.Intent
+import android.net.VpnService
 import android.os.Bundle
 import android.text.SpannableStringBuilder
 import android.text.style.ForegroundColorSpan
@@ -11,11 +13,13 @@ import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import android.widget.Toast
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.content.ContextCompat
 import androidx.fragment.app.Fragment
 import androidx.lifecycle.lifecycleScope
 import com.gmc.digitalkey.R
 import com.gmc.digitalkey.databinding.FragmentNetworkInspectorBinding
+import com.gmc.digitalkey.network.LocalVpnService
 import com.gmc.digitalkey.network.NetworkCaptureServer
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
@@ -25,9 +29,11 @@ class NetworkInspectorFragment : Fragment() {
     private var _binding: FragmentNetworkInspectorBinding? = null
     private val binding get() = _binding!!
 
-    private val server = NetworkCaptureServer()
-    private var running = false
     private var gmOnly = false
+
+    private val vpnLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
+        if (result.resultCode == Activity.RESULT_OK) startVpn()
+    }
 
     override fun onCreateView(inflater: LayoutInflater, container: ViewGroup?, savedInstanceState: Bundle?): View {
         _binding = FragmentNetworkInspectorBinding.inflate(inflater, container, false)
@@ -37,27 +43,25 @@ class NetworkInspectorFragment : Fragment() {
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
 
-        updateProxyAddress()
+        updateStatus()
 
         binding.btnStartStop.setOnClickListener {
-            if (running) stopServer() else startServer()
+            if (LocalVpnService.isRunning) stopVpn() else requestVpn()
         }
 
         binding.chipGmOnly.setOnCheckedChangeListener { _, checked ->
             gmOnly = checked
-            // Re-render current entries with filter
-            renderEntries(server.entries.value)
+            renderEntries(LocalVpnService.captureLog.entries.value)
         }
 
         binding.btnClear.setOnClickListener {
-            server.clearLog()
+            LocalVpnService.captureLog.clearLog()
         }
 
-        // Long-press to copy entire log to clipboard
         binding.logText.setOnLongClickListener {
             val text = binding.logText.text.toString()
             if (text.isNotBlank()) {
-                val clip = ClipData.newPlainText("network_log", text)
+                val clip = ClipData.newPlainText("vpn_log", text)
                 (requireContext().getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager)
                     .setPrimaryClip(clip)
                 Toast.makeText(requireContext(), getString(R.string.network_inspector_copied), Toast.LENGTH_SHORT).show()
@@ -66,81 +70,73 @@ class NetworkInspectorFragment : Fragment() {
         }
 
         viewLifecycleOwner.lifecycleScope.launch {
-            server.entries.collectLatest { entries ->
-                renderEntries(entries)
-            }
+            LocalVpnService.captureLog.entries.collectLatest { renderEntries(it) }
         }
     }
 
-    private fun startServer() {
-        server.start()
-        running = true
-        binding.btnStartStop.text = getString(R.string.network_inspector_stop)
-        Toast.makeText(requireContext(), getString(R.string.network_inspector_started), Toast.LENGTH_SHORT).show()
+    private fun requestVpn() {
+        val intent = VpnService.prepare(requireContext())
+        if (intent != null) vpnLauncher.launch(intent)
+        else startVpn()
     }
 
-    private fun stopServer() {
-        server.stop()
-        running = false
-        binding.btnStartStop.text = getString(R.string.network_inspector_start)
+    private fun startVpn() {
+        requireContext().startService(
+            Intent(requireContext(), LocalVpnService::class.java).setAction(LocalVpnService.ACTION_START)
+        )
+        updateStatus()
+    }
+
+    private fun stopVpn() {
+        requireContext().startService(
+            Intent(requireContext(), LocalVpnService::class.java).setAction(LocalVpnService.ACTION_STOP)
+        )
+        updateStatus()
+    }
+
+    private fun updateStatus() {
+        val running = LocalVpnService.isRunning
+        binding.btnStartStop.text = getString(
+            if (running) R.string.network_inspector_stop else R.string.network_inspector_start
+        )
+        binding.vpnStatusText.text = getString(
+            if (running) R.string.network_inspector_vpn_active else R.string.network_inspector_vpn_idle
+        )
+        binding.vpnStatusText.setTextColor(
+            ContextCompat.getColor(requireContext(), if (running) R.color.status_connected else R.color.text_secondary)
+        )
     }
 
     private fun renderEntries(entries: List<NetworkCaptureServer.LogEntry>) {
         val filtered = if (gmOnly) entries.filter { it.isGm } else entries
-        val gmColor = ContextCompat.getColor(requireContext(), R.color.gmc_red)
+        val gmColor  = ContextCompat.getColor(requireContext(), R.color.gmc_red)
 
-        binding.entryCountText.text = if (filtered.isEmpty()) {
+        binding.entryCountText.text = if (filtered.isEmpty())
             getString(R.string.network_inspector_no_entries)
-        } else {
+        else
             getString(R.string.network_inspector_entry_count, filtered.size)
-        }
 
         val sb = SpannableStringBuilder()
         filtered.forEach { entry ->
             val line = entry.display + "\n"
             if (entry.isGm) {
-                val start = sb.length
-                sb.append(line)
+                val start = sb.length; sb.append(line)
                 sb.setSpan(ForegroundColorSpan(gmColor), start, sb.length, 0)
             } else {
                 sb.append(line)
             }
         }
         binding.logText.text = sb
-
-        // Auto-scroll to bottom
-        binding.logScroll.post {
-            binding.logScroll.fullScroll(View.FOCUS_DOWN)
-        }
+        binding.logScroll.post { binding.logScroll.fullScroll(View.FOCUS_DOWN) }
     }
 
-    private fun updateProxyAddress() {
-        val ip = getWifiIpAddress()
-        binding.proxyAddressText.text = if (ip != null) {
-            "$ip:${NetworkCaptureServer.PORT}"
-        } else {
-            "Wi-Fi not connected"
-        }
-    }
-
-    private fun getWifiIpAddress(): String? {
-        return try {
-            val wm = requireContext().applicationContext
-                .getSystemService(Context.WIFI_SERVICE) as WifiManager
-            val ip = wm.connectionInfo?.ipAddress ?: return null
-            if (ip == 0) return null
-            "%d.%d.%d.%d".format(
-                ip and 0xff,
-                (ip shr 8) and 0xff,
-                (ip shr 16) and 0xff,
-                (ip shr 24) and 0xff
-            )
-        } catch (_: Exception) { null }
+    override fun onResume() {
+        super.onResume()
+        updateStatus()
     }
 
     override fun onDestroyView() {
         super.onDestroyView()
-        if (running) server.stop()
         _binding = null
     }
 }

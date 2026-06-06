@@ -82,6 +82,16 @@
             android:exported="false"
             android:foregroundServiceType="connectedDevice" />
 
+        <!-- VPN-based traffic inspector -->
+        <service
+            android:name=".network.LocalVpnService"
+            android:exported="false"
+            android:permission="android.permission.BIND_VPN_SERVICE">
+            <intent-filter>
+                <action android:name="android.net.VpnService" />
+            </intent-filter>
+        </service>
+
         <!-- Restart service after reboot or app update -->
         <receiver
             android:name=".ble.BootReceiver"
