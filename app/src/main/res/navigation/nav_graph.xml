@@ -47,6 +47,12 @@
         app:launchSingleTop="true"
         app:popUpTo="@id/homeFragment"
         app:popUpToInclusive="true" />
+    <action
+        android:id="@+id/action_global_network_inspector"
+        app:destination="@id/networkInspectorFragment"
+        app:launchSingleTop="true"
+        app:popUpTo="@id/homeFragment"
+        app:popUpToInclusive="false" />
 
     <fragment
         android:id="@+id/homeFragment"
@@ -128,5 +134,10 @@
             android:id="@+id/action_doip_to_vehicle_select"
             app:destination="@id/vehicleSelectFragment" />
     </fragment>
+
+    <fragment
+        android:id="@+id/networkInspectorFragment"
+        android:name="com.gmc.digitalkey.ui.research.NetworkInspectorFragment"
+        android:label="@string/network_inspector_title" />
 
 </navigation>

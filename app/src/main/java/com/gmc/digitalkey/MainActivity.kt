@@ -95,6 +95,10 @@ class MainActivity : AppCompatActivity() {
                     navController.navigate(R.id.action_global_settings)
                     true
                 }
+                R.id.drawer_network_inspector -> {
+                    navController.navigate(R.id.action_global_network_inspector)
+                    true
+                }
                 else -> false
             }
         }

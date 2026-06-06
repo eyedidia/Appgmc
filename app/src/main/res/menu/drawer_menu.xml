@@ -50,6 +50,10 @@
                 android:id="@+id/drawer_settings"
                 android:icon="@drawable/ic_nfc"
                 android:title="@string/drawer_settings" />
+            <item
+                android:id="@+id/drawer_network_inspector"
+                android:icon="@drawable/ic_ble"
+                android:title="@string/drawer_network_inspector" />
         </menu>
     </item>
 

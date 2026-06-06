@@ -130,4 +130,18 @@
     <string name="drawer_charge">Charge Status</string>
     <string name="drawer_settings">Settings</string>
     <string name="drawer_connect_first">Connect to vehicle first</string>
+    <string name="drawer_network_inspector">Network Inspector</string>
+
+    <!-- Network Inspector -->
+    <string name="network_inspector_title">NETWORK INSPECTOR</string>
+    <string name="network_inspector_proxy_label">Proxy Address (set this on your phone\'s Wi-Fi settings)</string>
+    <string name="network_inspector_proxy_hint">Set Manual proxy on Wi-Fi → Advanced → Proxy → Manual</string>
+    <string name="network_inspector_start">Start</string>
+    <string name="network_inspector_stop">Stop</string>
+    <string name="network_inspector_gm_only">GM only</string>
+    <string name="network_inspector_clear">Clear</string>
+    <string name="network_inspector_no_entries">No requests captured yet</string>
+    <string name="network_inspector_entry_count">%1$d requests</string>
+    <string name="network_inspector_started">Proxy running — set your Wi-Fi proxy and open myGMC</string>
+    <string name="network_inspector_copied">Log copied to clipboard</string>
 </resources>
