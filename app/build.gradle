@@ -4,6 +4,12 @@ plugins {
     id 'com.google.devtools.ksp'
 }
 
+// Auto-increment build number from git commit count.
+// Every `git commit` advances the build number automatically — no manual step.
+def gitBuildNumber = Integer.parseInt(
+    'git rev-list --count HEAD'.execute([], rootDir).text.trim()
+)
+
 android {
     namespace 'com.gmc.digitalkey'
     compileSdk 34
@@ -12,7 +18,7 @@ android {
         applicationId "com.gmc.digitalkey"
         minSdk 26
         targetSdk 34
-        versionCode 159
+        versionCode gitBuildNumber
         versionName "1.0"
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
     }
