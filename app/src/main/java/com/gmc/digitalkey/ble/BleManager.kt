@@ -410,11 +410,17 @@ class BleManager(private val context: Context) {
                 return
             }
             when (char.uuid) {
-                VehicleGattProfile.CHAR_CHALLENGE -> {
-                    if (!isPairingMode) handleChallenge(gatt, char.value)
+                VehicleGattProfile.CHAR_SERVER_WRITE -> {
+                    // Single vehicle→phone channel: challenge, status, charging — all arrive here.
+                    // Parse message type from first byte once the protocol is reverse-engineered.
+                    if (isPairingMode) {
+                        // In pairing mode, handle as pairing response (same as onCharacteristicRead path)
+                        val hex = char.value?.joinToString(" ") { "%02X".format(it) } ?: "empty"
+                        Log.i(TAG, "Pairing NOTIFY from vehicle: $hex")
+                    } else {
+                        handleChallenge(gatt, char.value)
+                    }
                 }
-                VehicleGattProfile.CHAR_STATUS   -> handleStatusUpdate(char.value)
-                VehicleGattProfile.CHAR_CHARGING -> handleChargingUpdate(char.value)
             }
         }
 
@@ -473,16 +479,15 @@ class BleManager(private val context: Context) {
         _connectionState.value = BleConnectionState.PairingInProgress(gatt.device)
         Log.i(TAG, "Sending PAIRING_REQUEST (${payload.size} bytes): ${payload.take(4).joinToString(" ") { "%02X".format(it) }}...")
 
-        // Enable notifications so we get the vehicle's pairing response
-        listOf(VehicleGattProfile.CHAR_CHALLENGE, VehicleGattProfile.CHAR_STATUS)
-            .mapNotNull { service.getCharacteristic(it) }
-            .forEach { char ->
-                gatt.setCharacteristicNotification(char, true)
-                char.getDescriptor(VehicleGattProfile.DESC_CCCD)?.let { desc ->
-                    desc.value = BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE
-                    gatt.writeDescriptor(desc)
-                }
+        // Subscribe to the single vehicle→phone characteristic (5E2A68A5) for pairing response
+        val serverChar = service.getCharacteristic(VehicleGattProfile.CHAR_SERVER_WRITE)
+        if (serverChar != null) {
+            gatt.setCharacteristicNotification(serverChar, true)
+            serverChar.getDescriptor(VehicleGattProfile.DESC_CCCD)?.let { desc ->
+                desc.value = BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE
+                gatt.writeDescriptor(desc)
             }
+        }
 
         handler.postDelayed({
             cmdChar.value = payload
@@ -495,7 +500,8 @@ class BleManager(private val context: Context) {
 
     private fun enableNotifications(gatt: BluetoothGatt) {
         val service = gatt.getService(VehicleGattProfile.SERVICE_UUID) ?: return
-        listOf(VehicleGattProfile.CHAR_CHALLENGE, VehicleGattProfile.CHAR_STATUS, VehicleGattProfile.CHAR_CHARGING)
+        // Single vehicle→phone channel 5E2A68A5 carries all events (challenge, status, charging)
+        listOf(VehicleGattProfile.CHAR_SERVER_WRITE)
             .mapNotNull { service.getCharacteristic(it) }
             .forEach { char ->
                 gatt.setCharacteristicNotification(char, true)
