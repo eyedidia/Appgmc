@@ -33,6 +33,9 @@ interface VehicleDao {
     @Query("UPDATE vehicles SET displayName = :name WHERE id = :id")
     suspend fun updateDisplayName(id: String, name: String)
 
+    @Query("UPDATE vehicles SET vin = :vin WHERE id = :id")
+    suspend fun updateVin(id: String, vin: String)
+
     @Query("UPDATE vehicles SET imageUrl = :url WHERE id = :id")
     suspend fun updateImageUrl(id: String, url: String)
 

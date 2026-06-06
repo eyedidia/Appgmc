@@ -1,12 +1,15 @@
 package com.gmc.digitalkey.ui.settings
 
 import android.annotation.SuppressLint
+import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.os.PowerManager
 import android.provider.Settings
+import android.text.InputFilter
+import android.text.InputType
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
@@ -36,25 +39,31 @@ class SettingsFragment : Fragment() {
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
         val db = AppDatabase.get(requireContext())
-        val prefs = PreferenceManager.getDefaultSharedPreferences(requireContext())
+        val nfcPrefs = PreferenceManager.getDefaultSharedPreferences(requireContext())
+        val gmcPrefs = requireContext().getSharedPreferences("gmc_prefs", Context.MODE_PRIVATE)
 
         var currentVehicle: VehicleEntity? = null
 
         viewLifecycleOwner.lifecycleScope.launch {
             db.vehicleDao().observeAll().collect { vehicles ->
-                val vehicle = vehicles.firstOrNull()
+                val activeId = gmcPrefs.getString("active_vehicle_id", null)
+                val vehicle = vehicles.firstOrNull { it.id == activeId } ?: vehicles.firstOrNull()
                 currentVehicle = vehicle
                 if (vehicle != null) {
                     binding.vehicleNameValue.text = vehicle.displayName
                     binding.vehicleModelValue.text = GmcEvModel.fromKey(vehicle.modelKey).displayName
-                    binding.vehicleVinValue.text = vehicle.vin.ifEmpty { "Not provided" }
+                    binding.vehicleVinValue.text = vehicle.vin.ifEmpty { "Not set" }
                     binding.passiveUnlockSwitch.isChecked = vehicle.passiveUnlockEnabled
                     binding.btnEditName.visibility = View.VISIBLE
+                    binding.btnEditVin.visibility = View.VISIBLE
+                    binding.btnRemoveVehicle.visibility = View.VISIBLE
                 } else {
                     binding.vehicleNameValue.text = "—"
                     binding.vehicleModelValue.text = "—"
                     binding.vehicleVinValue.text = "—"
                     binding.btnEditName.visibility = View.GONE
+                    binding.btnEditVin.visibility = View.GONE
+                    binding.btnRemoveVehicle.visibility = View.GONE
                 }
             }
         }
@@ -79,22 +88,67 @@ class SettingsFragment : Fragment() {
                 .show()
         }
 
+        binding.btnEditVin.setOnClickListener {
+            val vehicle = currentVehicle ?: return@setOnClickListener
+            val input = EditText(requireContext()).apply {
+                setText(vehicle.vin)
+                selectAll()
+                setSingleLine()
+                inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_CAP_CHARACTERS
+                filters = arrayOf(InputFilter.LengthFilter(17))
+                hint = "17-character VIN"
+                typeface = android.graphics.Typeface.MONOSPACE
+            }
+            MaterialAlertDialogBuilder(requireContext())
+                .setTitle("Edit VIN")
+                .setMessage("Enter the 17-character VIN from your vehicle's door jamb or dashboard.")
+                .setView(input)
+                .setPositiveButton("Save") { _, _ ->
+                    val newVin = input.text.toString().trim().uppercase()
+                    if (newVin.isEmpty()) return@setPositiveButton
+                    viewLifecycleOwner.lifecycleScope.launch {
+                        db.vehicleDao().updateVin(vehicle.id, newVin)
+                    }
+                }
+                .setNegativeButton("Cancel", null)
+                .show()
+        }
+
+        binding.btnRemoveVehicle.setOnClickListener {
+            val vehicle = currentVehicle ?: return@setOnClickListener
+            MaterialAlertDialogBuilder(requireContext())
+                .setTitle("Remove Vehicle")
+                .setMessage("Remove \"${vehicle.displayName}\" from your Digital Key?\n\nYou'll need to pair again to reconnect.")
+                .setPositiveButton("Remove") { _, _ ->
+                    viewLifecycleOwner.lifecycleScope.launch {
+                        db.vehicleDao().deleteById(vehicle.id)
+                        val activeId = gmcPrefs.getString("active_vehicle_id", null)
+                        if (activeId == vehicle.id) {
+                            gmcPrefs.edit().remove("active_vehicle_id").apply()
+                        }
+                        PassiveUnlockService.stop(requireContext())
+                    }
+                }
+                .setNegativeButton("Cancel", null)
+                .show()
+        }
+
         // NFC mode
-        val savedNfcMode = prefs.getString("nfc_mode", "hce")
+        val savedNfcMode = nfcPrefs.getString("nfc_mode", "hce")
         binding.nfcModeGroup.check(
             if (savedNfcMode == "hce") binding.nfcHceRadio.id else binding.nfcTagRadio.id
         )
         binding.nfcModeGroup.setOnCheckedChangeListener { _, checkedId ->
             val mode = if (checkedId == binding.nfcHceRadio.id) "hce" else "tag"
-            prefs.edit().putString("nfc_mode", mode).apply()
+            nfcPrefs.edit().putString("nfc_mode", mode).apply()
         }
 
         // Passive unlock toggle
         binding.passiveUnlockSwitch.setOnCheckedChangeListener { _, enabled ->
             viewLifecycleOwner.lifecycleScope.launch {
-                val vehicle = db.vehicleDao().getAll().firstOrNull() ?: return@launch
+                val vehicle = currentVehicle ?: return@launch
                 db.vehicleDao().setPassiveUnlock(vehicle.id, enabled)
-                prefs.edit().putString("active_vehicle_id", vehicle.id).apply()
+                gmcPrefs.edit().putString("active_vehicle_id", vehicle.id).apply()
                 if (enabled) {
                     requestBatteryOptimizationExemption()
                     PassiveUnlockService.start(requireContext())
