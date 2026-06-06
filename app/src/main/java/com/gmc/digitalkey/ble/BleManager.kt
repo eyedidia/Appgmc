@@ -66,6 +66,8 @@ class BleManager(private val context: Context) {
     private var currentVehicleId: String? = null
     private var isPairingMode = false      // true = send PAIRING_REQUEST + pubkey, not challenge-response
     private var isDumpMode = false         // true = only dump GATT services, don't auth
+    private var isProbeMode = false        // true = subscribe to 4CDABAA2 and log raw bytes
+    private val probeLogs = mutableListOf<String>()
     private var reconnectAttempts = 0
     private val handler = Handler(Looper.getMainLooper())
     private var scanner: BluetoothLeScanner? = null
@@ -242,10 +244,41 @@ class BleManager(private val context: Context) {
     fun dumpGatt(device: BluetoothDevice) {
         isDumpMode = true
         isPairingMode = false
+        isProbeMode = false
         currentVehicleId = null
         _connectionState.value = BleConnectionState.Connecting(device)
         gatt?.close()
         gatt = device.connectGatt(context, false, gattCallback, BluetoothDevice.TRANSPORT_LE)
+    }
+
+    // ─── Direct BLE probe (4CDABAA0) — subscribe to NOTIFY and log raw bytes ──
+    // Use when you've identified the vehicle's direct digital-key BLE service and want
+    // to capture what the vehicle sends spontaneously after connection.
+
+    fun probeVehicleDirect(device: BluetoothDevice) {
+        isProbeMode = true
+        isDumpMode = false
+        isPairingMode = false
+        currentVehicleId = null
+        synchronized(probeLogs) { probeLogs.clear() }
+        _connectionState.value = BleConnectionState.Connecting(device)
+        gatt?.close()
+        gatt = device.connectGatt(context, false, gattCallback, BluetoothDevice.TRANSPORT_LE)
+    }
+
+    fun sendDirectBleBytes(hexString: String) {
+        if (!isProbeMode) return
+        val g = gatt ?: return
+        val service = g.getService(VehicleGattProfile.SERVICE_DIRECT_DK) ?: return
+        val txChar = service.getCharacteristic(VehicleGattProfile.CHAR_DIRECT_DK_TX) ?: return
+        val bytes = hexString.replace(" ", "").chunked(2)
+            .mapNotNull { it.toIntOrNull(16)?.toByte() }.toByteArray()
+        txChar.value = bytes
+        txChar.writeType = BluetoothGattCharacteristic.WRITE_TYPE_NO_RESPONSE
+        g.writeCharacteristic(txChar)
+        val entry = "TX → ${bytes.joinToString(" ") { "%02X".format(it) }}"
+        synchronized(probeLogs) { probeLogs.add(entry) }
+        _connectionState.value = BleConnectionState.VehicleBleLog(g.device, probeLogs.toList())
     }
 
     // ─── Commands ─────────────────────────────────────────────────────────────
@@ -281,6 +314,8 @@ class BleManager(private val context: Context) {
         reconnectAttempts = 0
         isPairingMode = false
         isDumpMode = false
+        isProbeMode = false
+        synchronized(probeLogs) { probeLogs.clear() }
         gatt?.disconnect()
         gatt?.close()
         gatt = null
@@ -299,10 +334,10 @@ class BleManager(private val context: Context) {
                     gatt.discoverServices()
                 }
                 BluetoothProfile.STATE_DISCONNECTED -> {
-                    if (isPairingMode || isDumpMode) {
+                    if (isPairingMode || isDumpMode || isProbeMode) {
                         // Don't auto-reconnect for one-shot operations
                         _connectionState.value = BleConnectionState.Idle
-                        isPairingMode = false; isDumpMode = false
+                        isPairingMode = false; isDumpMode = false; isProbeMode = false
                         return
                     }
                     if (reconnectAttempts < 10) {
@@ -328,6 +363,10 @@ class BleManager(private val context: Context) {
 
             if (isDumpMode) {
                 performGattDump(gatt); return
+            }
+
+            if (isProbeMode) {
+                performVehicleProbe(gatt); return
             }
 
             if (isPairingMode) {
@@ -360,6 +399,16 @@ class BleManager(private val context: Context) {
         }
 
         override fun onCharacteristicChanged(gatt: BluetoothGatt, char: BluetoothGattCharacteristic) {
+            if (isProbeMode) {
+                val bytes = char.value ?: return
+                val hex = bytes.joinToString(" ") { "%02X".format(it) }
+                val ascii = String(bytes).map { if (it.code in 32..126) it else '.' }.joinToString("")
+                val ts = System.currentTimeMillis() % 1_000_000
+                val entry = "$ts  RX ← $hex  |  $ascii"
+                synchronized(probeLogs) { probeLogs.add(entry) }
+                _connectionState.value = BleConnectionState.VehicleBleLog(gatt.device, probeLogs.toList())
+                return
+            }
             when (char.uuid) {
                 VehicleGattProfile.CHAR_CHALLENGE -> {
                     if (!isPairingMode) handleChallenge(gatt, char.value)
@@ -474,6 +523,33 @@ class BleManager(private val context: Context) {
         char.value = signature
         char.writeType = BluetoothGattCharacteristic.WRITE_TYPE_DEFAULT
         gatt.writeCharacteristic(char)
+    }
+
+    // ─── Direct BLE probe ─────────────────────────────────────────────────────
+
+    private fun performVehicleProbe(gatt: BluetoothGatt) {
+        val service = gatt.getService(VehicleGattProfile.SERVICE_DIRECT_DK) ?: run {
+            // Service not found after connect — fall back to GATT dump for research
+            Log.i(TAG, "4CDABAA0 not found — falling back to GATT dump")
+            performGattDump(gatt)
+            return
+        }
+        val rxChar = service.getCharacteristic(VehicleGattProfile.CHAR_DIRECT_DK_RX) ?: run {
+            performGattDump(gatt); return
+        }
+        gatt.setCharacteristicNotification(rxChar, true)
+        rxChar.getDescriptor(VehicleGattProfile.DESC_CCCD)?.let { desc ->
+            desc.value = BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE
+            gatt.writeDescriptor(desc)
+        }
+        val header = "Connected to ${gatt.device.address}  service=4CDABAA0\nListening for notifications on 4CDABAA2…"
+        synchronized(probeLogs) { probeLogs.add(header) }
+        _connectionState.value = BleConnectionState.VehicleBleLog(gatt.device, probeLogs.toList())
+        Log.i(TAG, "Vehicle BLE probe: subscribed to 4CDABAA2 NOTIFY")
+        // Auto-disconnect after 120 s if nothing sent it earlier
+        handler.postDelayed({
+            if (isProbeMode) { gatt.disconnect(); isProbeMode = false }
+        }, 120_000)
     }
 
     // ─── GATT dump ────────────────────────────────────────────────────────────

@@ -149,6 +149,14 @@ class DigitalKeyViewModel(app: Application) : AndroidViewModel(app) {
         bleManager.dumpGatt(device)
     }
 
+    fun probeVehicleDirect(device: BluetoothDevice) {
+        bleManager.probeVehicleDirect(device)
+    }
+
+    fun sendDirectBleBytes(hexString: String) {
+        bleManager.sendDirectBleBytes(hexString)
+    }
+
     fun unpairVehicle(vehicleId: String) {
         viewModelScope.launch {
             db.vehicleDao().deleteById(vehicleId)

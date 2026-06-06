@@ -16,6 +16,7 @@ sealed class BleConnectionState {
     data class Ready(val device: BluetoothDevice, val rssi: Int = 0) : BleConnectionState()
     data class CommandSent(val command: String) : BleConnectionState()
     data class GattDump(val device: BluetoothDevice, val services: List<ServiceInfo>) : BleConnectionState()
+    data class VehicleBleLog(val device: BluetoothDevice, val entries: List<String>) : BleConnectionState()
     data class Error(val message: String, val recoverable: Boolean = true) : BleConnectionState()
 
     val isConnected get() = this is Connected || this is Authenticating || this is Ready || this is PairingInProgress

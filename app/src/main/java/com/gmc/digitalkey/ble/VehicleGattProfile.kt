@@ -36,6 +36,12 @@ object VehicleGattProfile {
     val CHAR_EXTRA_3: UUID = UUID.fromString("9188040D-6C67-4C5B-B112-36A304B66DAD")
     val CHAR_EXTRA_4: UUID = UUID.fromString("9EB6528D-BB65-4239-B196-6789196CF2A9")
 
+    // Direct BLE service — confirmed on 2026 GMC Sierra EV (VIN 1GT4EVEL2TU400190, addr FC:B8:B1:B8:46:D1)
+    // Also present: Nordic DFU service (FE59) — BLE module firmware update, do not interact.
+    val SERVICE_DIRECT_DK: UUID  = UUID.fromString("4CDABAA0-2CEA-C0C1-B38D-A0481AE60A97")
+    val CHAR_DIRECT_DK_TX: UUID = UUID.fromString("4CDABAA1-2CEA-C0C1-B38D-A0481AE60A97")  // WRITE_NR (phone → vehicle)
+    val CHAR_DIRECT_DK_RX: UUID = UUID.fromString("4CDABAA2-2CEA-C0C1-B38D-A0481AE60A97")  // NOTIFY  (vehicle → phone)
+
     // CCCD descriptor for enabling notifications (standard BLE)
     val DESC_CCCD: UUID = UUID.fromString("00002902-0000-1000-8000-00805F9B34FB")
 
@@ -49,7 +55,8 @@ object VehicleGattProfile {
     /** All service UUIDs to include in the BLE scan filter — covers all three BLE stacks. */
     val SCAN_SERVICE_UUIDS = listOf(
         SERVICE_UUID, RECONNECTION_SERVICE_UUID, V2_SERVICE_UUID,  // automotive_trustagent
-        VIPKIT_UUID_1, VIPKIT_UUID_2, VIPKIT_UUID_3                // VipKit
+        VIPKIT_UUID_1, VIPKIT_UUID_2, VIPKIT_UUID_3,               // VipKit
+        SERVICE_DIRECT_DK                                           // direct BLE DK service (Sierra EV)
     )
 
     object Commands {

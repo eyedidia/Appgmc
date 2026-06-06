@@ -41,6 +41,10 @@ class DigitalKeyFragment : Fragment() {
     private lateinit var qrLauncher: ActivityResultLauncher<ScanOptions>
     private var lastQrHints: com.gmc.digitalkey.ble.QrPairingParser.PairingHints? = null
 
+    // Vehicle BLE probe dialog — kept open and updated in-place as notifications arrive
+    private var vehicleBleLogTv: TextView? = null
+    private var vehicleBleDialogInstance: android.app.AlertDialog? = null
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         qrLauncher = registerForActivityResult(ScanContract()) { result ->
@@ -187,6 +191,16 @@ class DigitalKeyFragment : Fragment() {
                 binding.bleIconCenter.setColorFilter(requireContext().getColor(R.color.status_connected))
                 showGattDumpDialog(state)
             }
+            is BleConnectionState.VehicleBleLog -> {
+                binding.keyStatusSub.text = "Vehicle BLE probe — ${state.entries.size} events"
+                binding.bleIconCenter.setColorFilter(requireContext().getColor(R.color.gmc_red))
+                val text = state.entries.joinToString("\n").ifEmpty { "Listening…" }
+                if (vehicleBleDialogInstance?.isShowing == true) {
+                    vehicleBleLogTv?.text = text  // update in-place
+                } else {
+                    showVehicleBleLogDialog(state)
+                }
+            }
             is BleConnectionState.BluetoothOff -> {
                 binding.keyStatusLabel.text = getString(R.string.digital_key_inactive)
                 binding.keyStatusSub.text = getString(R.string.ble_off)
@@ -238,8 +252,23 @@ class DigitalKeyFragment : Fragment() {
                 setPadding(0, 8, 0, 8)
                 isClickable = true
                 isFocusable = true
-                // Tap any device → GATT dump (most useful during pairing window)
-                setOnClickListener { viewModel.dumpVehicleGatt(advert.device) }
+                // Tap: probe direct BLE service if present, otherwise GATT dump
+                setOnClickListener {
+                    val hasDirectSvc = advert.serviceUuids.any {
+                        it == com.gmc.digitalkey.ble.VehicleGattProfile.SERVICE_DIRECT_DK
+                    }
+                    if (hasDirectSvc) {
+                        viewModel.probeVehicleDirect(advert.device)
+                        Toast.makeText(requireContext(), "Connecting to vehicle BLE (4CDABAA0)…", Toast.LENGTH_SHORT).show()
+                    } else {
+                        viewModel.dumpVehicleGatt(advert.device)
+                    }
+                }
+                setOnLongClickListener {
+                    viewModel.probeVehicleDirect(advert.device)
+                    Toast.makeText(requireContext(), "Probe vehicle BLE…", Toast.LENGTH_SHORT).show()
+                    true
+                }
             }
             val divider = View(requireContext()).apply {
                 setBackgroundColor(requireContext().getColor(R.color.bg_surface))
@@ -314,6 +343,56 @@ class DigitalKeyFragment : Fragment() {
             .show()
     }
 
+    @SuppressLint("SetTextI18n")
+    private fun showVehicleBleLogDialog(state: BleConnectionState.VehicleBleLog) {
+        val text = state.entries.joinToString("\n").ifEmpty { "Listening for notifications…" }
+        val tv = TextView(requireContext()).apply {
+            this.text = text
+            textSize = 9f
+            typeface = Typeface.MONOSPACE
+            setTextColor(requireContext().getColor(R.color.text_primary))
+            setPadding(32, 16, 32, 16)
+        }
+        vehicleBleLogTv = tv
+        val scroll = ScrollView(requireContext()).apply { addView(tv) }
+
+        val hexInput = android.widget.EditText(requireContext()).apply {
+            hint = "Hex bytes to send (e.g. 01 02 03)"
+            textSize = 12f
+            inputType = android.text.InputType.TYPE_CLASS_TEXT
+        }
+        val container = android.widget.LinearLayout(requireContext()).apply {
+            orientation = android.widget.LinearLayout.VERTICAL
+            setPadding(32, 0, 32, 0)
+            addView(scroll, android.widget.LinearLayout.LayoutParams(
+                android.view.ViewGroup.LayoutParams.MATCH_PARENT, 500))
+            addView(hexInput)
+        }
+
+        vehicleBleDialogInstance = MaterialAlertDialogBuilder(requireContext())
+            .setTitle("Vehicle BLE — ${state.device.address}")
+            .setView(container)
+            .setPositiveButton("Send") { _, _ ->
+                val hex = hexInput.text.toString().trim()
+                if (hex.isNotEmpty()) viewModel.sendDirectBleBytes(hex)
+            }
+            .setNeutralButton("Copy") { _, _ ->
+                val logText = vehicleBleLogTv?.text?.toString() ?: ""
+                val cb = requireContext().getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+                cb.setPrimaryClip(android.content.ClipData.newPlainText("BLE Log", logText))
+                Toast.makeText(requireContext(), "Copied", Toast.LENGTH_SHORT).show()
+            }
+            .setNegativeButton("Close") { _, _ ->
+                vehicleBleLogTv = null
+                vehicleBleDialogInstance = null
+            }
+            .setOnCancelListener {
+                vehicleBleLogTv = null
+                vehicleBleDialogInstance = null
+            }
+            .show()
+    }
+
     private fun showUnpairDialog(vehicle: VehicleEntity) {
         MaterialAlertDialogBuilder(requireContext())
             .setTitle(getString(R.string.unpair_confirm))
@@ -327,6 +406,9 @@ class DigitalKeyFragment : Fragment() {
 
     override fun onDestroyView() {
         super.onDestroyView()
+        vehicleBleDialogInstance?.dismiss()
+        vehicleBleDialogInstance = null
+        vehicleBleLogTv = null
         _binding = null
     }
 }

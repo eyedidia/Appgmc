@@ -90,6 +90,13 @@ class Obd2Manager(private val context: Context) {
     val commandLog: List<Pair<String, String>> get() = synchronized(_commandLog) { _commandLog.toList() }
     fun clearCommandLog() = synchronized(_commandLog) { _commandLog.clear() }
 
+    // GATT profile summary — persists across clearCommandLog so it's always in exports
+    private var gattProfileInfo: String = ""
+
+    // 6E400003 READ-polling fallback: Basic OBD Coding Pro adapter exposes this char with READ
+    // (not NOTIFY) inside the FFE0 service. After writing to FFE1 we poll it for responses.
+    private var pollReadChar: BluetoothGattCharacteristic? = null
+
     // -- Scanning
 
     fun scanForAdapter(onFound: (BluetoothDevice) -> Unit, onStopped: () -> Unit = {}) {
@@ -362,6 +369,7 @@ class Obd2Manager(private val context: Context) {
         gatt?.close()
         gatt = null
         layout = null
+        pollReadChar = null
         pendingResponse?.cancel()
         pendingResponse = null
         rxBuffer.clear()
@@ -415,7 +423,7 @@ class Obd2Manager(private val context: Context) {
                     pendingResponse = null
                     error("BLE write failed (writeCharacteristic returned false) — check GATT layout")
                 }
-                response = withTimeout(timeoutMs) { deferred.await() }
+                response = awaitResponseWithOptionalPoll(g, deferred, timeoutMs)
             }
             synchronized(_commandLog) { _commandLog.add(cmd to response) }
             response
@@ -425,11 +433,38 @@ class Obd2Manager(private val context: Context) {
         }
     }
 
+    // Poll on 6E400003 concurrently while waiting for an FFE1 notification.
+    // If the adapter delivers responses via READ instead of NOTIFY, the poll coroutine
+    // feeds `pendingResponse` via onCharacteristicRead before the notification fires.
+    private suspend fun awaitResponseWithOptionalPoll(
+        g: BluetoothGatt,
+        deferred: CompletableDeferred<String>,
+        timeoutMs: Long
+    ): String {
+        val pollChar = pollReadChar ?: return withTimeout(timeoutMs) { deferred.await() }
+        val pollJob = scope.launch {
+            delay(150)  // give FFE1 NOTIFY a chance first
+            while (!deferred.isCompleted) {
+                g.readCharacteristic(pollChar)
+                delay(120)
+            }
+        }
+        return try {
+            withTimeout(timeoutMs) { deferred.await() }
+        } finally {
+            pollJob.cancel()
+        }
+    }
+
     // -- High-level init sequence with automatic 29-bit CAN detection
 
     suspend fun initialize(): Boolean {
         _state.value = Obd2State.Initializing
         clearCommandLog()
+        // Re-inject GATT profile so it survives clearCommandLog and appears in every export
+        if (gattProfileInfo.isNotEmpty()) {
+            synchronized(_commandLog) { _commandLog.add("GATT profile" to gattProfileInfo) }
+        }
         use29BitCan = false
         adapterIdentity = ""
         return try {
@@ -706,12 +741,26 @@ class Obd2Manager(private val context: Context) {
                 if (txProps and BluetoothGattCharacteristic.PROPERTY_NOTIFY != 0) append("N ")
                 if (txProps and BluetoothGattCharacteristic.PROPERTY_INDICATE != 0) append("I ")
             }.trim()
+            gattProfileInfo = "svc=$svcShort  tx=$txShort  rx=$rxShort  props=[$propsStr]"
             synchronized(_commandLog) {
-                _commandLog.add("GATT profile" to "svc=$svcShort  tx=$txShort  rx=$rxShort  props=[$propsStr]")
+                _commandLog.add("GATT profile" to gattProfileInfo)
             }
 
             val service = gatt.getService(discoveredLayout.serviceUuid) ?: return
             val rxChar = service.getCharacteristic(discoveredLayout.rxChar) ?: return
+
+            // Basic OBD Coding Pro: 6E400003 [READ] sits inside the FFE0 service.
+            // If FFE1 NOTIFY is silent, we poll this char for responses.
+            if (discoveredLayout.serviceUuid == Elm327GattProfile.SERVICE_FFE0) {
+                val mayPoll = service.getCharacteristic(Elm327GattProfile.CHAR_NUS_RX)
+                if (mayPoll != null &&
+                    mayPoll.properties and BluetoothGattCharacteristic.PROPERTY_READ != 0) {
+                    pollReadChar = mayPoll
+                    synchronized(_commandLog) {
+                        _commandLog.add("Poll char" to "6E400003 [READ] found in FFE0 — polling enabled as NOTIFY fallback")
+                    }
+                }
+            }
             gatt.setCharacteristicNotification(rxChar, true)
             val desc = rxChar.getDescriptor(Elm327GattProfile.DESC_CCCD)
             if (desc != null) {
@@ -719,6 +768,21 @@ class Obd2Manager(private val context: Context) {
                 gatt.writeDescriptor(desc)
             } else {
                 _state.value = Obd2State.AdapterFound(gatt.device)
+            }
+        }
+
+        override fun onCharacteristicRead(gatt: BluetoothGatt, char: BluetoothGattCharacteristic, status: Int) {
+            if (status != BluetoothGatt.GATT_SUCCESS) return
+            if (char.uuid != Elm327GattProfile.CHAR_NUS_RX) return
+            val raw = char.value?.takeIf { it.isNotEmpty() } ?: return
+            val chunk = String(raw, Charsets.US_ASCII)
+            if (chunk.isBlank()) return
+            rxBuffer.append(chunk)
+            if (rxBuffer.contains('>')) {
+                val response = rxBuffer.toString().substringBefore('>').trim()
+                rxBuffer.clear()
+                pendingResponse?.complete(response)
+                pendingResponse = null
             }
         }
 
