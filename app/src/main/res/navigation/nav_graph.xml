@@ -4,6 +4,50 @@
     android:id="@+id/nav_graph"
     app:startDestination="@id/homeFragment">
 
+    <!-- Global actions accessible from anywhere in the nav graph -->
+    <action
+        android:id="@+id/action_global_obd2"
+        app:destination="@id/obd2ActivationFragment"
+        app:launchSingleTop="true"
+        app:popUpTo="@id/homeFragment"
+        app:popUpToInclusive="false" />
+    <action
+        android:id="@+id/action_global_doip"
+        app:destination="@id/doipActivationFragment"
+        app:launchSingleTop="true"
+        app:popUpTo="@id/homeFragment"
+        app:popUpToInclusive="false" />
+    <action
+        android:id="@+id/action_global_vehicle_select"
+        app:destination="@id/vehicleSelectFragment"
+        app:launchSingleTop="true"
+        app:popUpTo="@id/homeFragment"
+        app:popUpToInclusive="false" />
+    <action
+        android:id="@+id/action_global_digital_key"
+        app:destination="@id/digitalKeyFragment"
+        app:launchSingleTop="true"
+        app:popUpTo="@id/homeFragment"
+        app:popUpToInclusive="false" />
+    <action
+        android:id="@+id/action_global_charge"
+        app:destination="@id/chargeFragment"
+        app:launchSingleTop="true"
+        app:popUpTo="@id/homeFragment"
+        app:popUpToInclusive="false" />
+    <action
+        android:id="@+id/action_global_settings"
+        app:destination="@id/settingsFragment"
+        app:launchSingleTop="true"
+        app:popUpTo="@id/homeFragment"
+        app:popUpToInclusive="false" />
+    <action
+        android:id="@+id/action_global_home"
+        app:destination="@id/homeFragment"
+        app:launchSingleTop="true"
+        app:popUpTo="@id/homeFragment"
+        app:popUpToInclusive="true" />
+
     <fragment
         android:id="@+id/homeFragment"
         android:name="com.gmc.digitalkey.ui.home.HomeFragment"

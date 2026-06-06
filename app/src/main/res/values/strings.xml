@@ -111,4 +111,22 @@
     <string name="cancel">Cancel</string>
     <string name="remove">Remove</string>
     <string name="done">Done</string>
+
+    <!-- Navigation Drawer -->
+    <string name="drawer_header_subtitle">GM Digital Key Tool</string>
+    <string name="drawer_connect_section">Connect &amp; Activate</string>
+    <string name="drawer_obd2">OBD2 BLE / Bluetooth</string>
+    <string name="drawer_doip">Vehicle Wi-Fi (DoIP)</string>
+    <string name="drawer_vehicle_select">Select Vehicle</string>
+    <string name="drawer_controls_section">Vehicle Controls</string>
+    <string name="drawer_digital_key">Digital Key</string>
+    <string name="drawer_unlock">Unlock Doors</string>
+    <string name="drawer_lock">Lock Doors</string>
+    <string name="drawer_start_engine">Start Engine</string>
+    <string name="drawer_start_engine_soon">Start Engine (coming soon)</string>
+    <string name="drawer_coming_soon">(coming soon)</string>
+    <string name="drawer_app_section">App</string>
+    <string name="drawer_charge">Charge Status</string>
+    <string name="drawer_settings">Settings</string>
+    <string name="drawer_connect_first">Connect to vehicle first</string>
 </resources>
