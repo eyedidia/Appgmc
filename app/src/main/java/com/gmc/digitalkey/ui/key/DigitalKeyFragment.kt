@@ -43,7 +43,7 @@ class DigitalKeyFragment : Fragment() {
 
     // Vehicle BLE probe dialog — kept open and updated in-place as notifications arrive
     private var vehicleBleLogTv: TextView? = null
-    private var vehicleBleDialogInstance: android.app.AlertDialog? = null
+    private var vehicleBleDialogInstance: androidx.appcompat.app.AlertDialog? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
