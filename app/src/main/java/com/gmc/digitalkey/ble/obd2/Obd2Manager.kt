@@ -402,9 +402,19 @@ class Obd2Manager(private val context: Context) {
                 rxBuffer.clear()
                 val deferred = CompletableDeferred<String>()
                 pendingResponse = deferred
-                txChar.writeType = BluetoothGattCharacteristic.WRITE_TYPE_NO_RESPONSE
+                // Use write type that the characteristic actually advertises.
+                // Forcing WRITE_NO_RESPONSE on a WRITE-only char silently drops the data.
+                txChar.writeType = if (txChar.properties and
+                    BluetoothGattCharacteristic.PROPERTY_WRITE_NO_RESPONSE != 0)
+                    BluetoothGattCharacteristic.WRITE_TYPE_NO_RESPONSE
+                else
+                    BluetoothGattCharacteristic.WRITE_TYPE_DEFAULT
                 txChar.value = (cmd + "\r").toByteArray(Charsets.US_ASCII)
-                g.writeCharacteristic(txChar)
+                val writeOk = g.writeCharacteristic(txChar)
+                if (!writeOk) {
+                    pendingResponse = null
+                    error("BLE write failed (writeCharacteristic returned false) — check GATT layout")
+                }
                 response = withTimeout(timeoutMs) { deferred.await() }
             }
             synchronized(_commandLog) { _commandLog.add(cmd to response) }
@@ -423,6 +433,11 @@ class Obd2Manager(private val context: Context) {
         use29BitCan = false
         adapterIdentity = ""
         return try {
+            // Wake-up: some adapters (non-ELM327, professional coding adapters) need an empty
+            // CR to flush their input buffer before responding to ATZ.
+            try { sendCommand("", 800) } catch (_: Exception) {}
+            delay(300)
+
             sendCommand("ATZ", 5_000)
             delay(1_200)
 
@@ -679,6 +694,21 @@ class Obd2Manager(private val context: Context) {
                 }
             }
             layout = discoveredLayout
+            // Log which GATT profile was selected so export shows service/char UUIDs
+            val svcShort = discoveredLayout.serviceUuid.toString().uppercase().take(8)
+            val txShort  = discoveredLayout.txChar.toString().uppercase().take(8)
+            val rxShort  = discoveredLayout.rxChar.toString().uppercase().take(8)
+            val txProps  = gatt.getService(discoveredLayout.serviceUuid)
+                ?.getCharacteristic(discoveredLayout.txChar)?.properties ?: 0
+            val propsStr = buildString {
+                if (txProps and BluetoothGattCharacteristic.PROPERTY_WRITE != 0) append("W ")
+                if (txProps and BluetoothGattCharacteristic.PROPERTY_WRITE_NO_RESPONSE != 0) append("WNR ")
+                if (txProps and BluetoothGattCharacteristic.PROPERTY_NOTIFY != 0) append("N ")
+                if (txProps and BluetoothGattCharacteristic.PROPERTY_INDICATE != 0) append("I ")
+            }.trim()
+            synchronized(_commandLog) {
+                _commandLog.add("GATT profile" to "svc=$svcShort  tx=$txShort  rx=$rxShort  props=[$propsStr]")
+            }
 
             val service = gatt.getService(discoveredLayout.serviceUuid) ?: return
             val rxChar = service.getCharacteristic(discoveredLayout.rxChar) ?: return
