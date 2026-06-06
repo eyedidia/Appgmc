@@ -339,7 +339,7 @@ object GmVcimActivation {
                 lastFullSeed = freshSeed
                 if (algName == "32B-NOT") {
                     stepLog += StepResult("SecurityAccess L1 (0x01) seed", true,
-                        "Seed: ${freshSeed.take(4).toByteArray().toHex()} (full ${freshSeed.size}B)")
+                        "Seed (${freshSeed.size}B): ${freshSeed.toHex()}")
                     Log.i(TAG, "Full L1 seed: ${freshSeed.toHex()}")
                 }
 
@@ -409,7 +409,7 @@ object GmVcimActivation {
                     if (lastFullSeed.isEmpty()) lastFullSeed = freshSeed
                     if (algName == "LFSR") {
                         stepLog += StepResult("SecurityAccess L2 (0x03) seed", true,
-                            "Seed: ${freshSeed.toHex()} (${freshSeed.size}B)")
+                            "Seed (${freshSeed.size}B): ${freshSeed.toHex()}")
                         Log.i(TAG, "Full L2 seed: ${freshSeed.toHex()}")
                     }
                     val key = algFn(freshSeed)
@@ -479,7 +479,7 @@ object GmVcimActivation {
                     if (lastFullSeed.isEmpty()) lastFullSeed = freshSeed
                     if (algName == "LFSR") {
                         stepLog += StepResult("SecurityAccess L3 (0x05) seed", true,
-                            "Seed: ${freshSeed.toHex()} (${freshSeed.size}B)")
+                            "Seed (${freshSeed.size}B): ${freshSeed.toHex()}")
                         Log.i(TAG, "Full L3 seed: ${freshSeed.toHex()}")
                     }
 

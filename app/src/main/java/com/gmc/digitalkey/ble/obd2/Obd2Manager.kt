@@ -60,6 +60,10 @@ class Obd2Manager(private val context: Context) {
     var use29BitCan = false
         private set
 
+    // Adapter self-identification string from ATI response (e.g. "ELM327 v1.5", "OBDII v2.1")
+    var adapterIdentity: String = ""
+        private set
+
     // True when switched to 11-bit CAN mode for Ultium K73 VCIM at 0x252/0x652
     var isUltiumMode = false
         private set
@@ -417,13 +421,19 @@ class Obd2Manager(private val context: Context) {
         _state.value = Obd2State.Initializing
         clearCommandLog()
         use29BitCan = false
+        adapterIdentity = ""
         return try {
             sendCommand("ATZ", 5_000)
             delay(1_200)
+
+            // Read adapter identity before muting echo — helps identify Basic OBD Coding Pro variants
+            adapterIdentity = try { sendCommand("ATI", 2_000).trim() } catch (_: Exception) { "?" }
+
             sendCommand("ATE0"); delay(100)
             sendCommand("ATL0"); delay(100)
             sendCommand("ATH1"); delay(100)  // headers on — needed for ECU ID discovery
             sendCommand("ATAT1"); delay(100)
+            sendCommand("ATCAF1"); delay(100) // CAN auto-format ON — required for ISO-TP multi-frame TX
 
             // Detect CAN protocol: try 29-bit first, fall back to auto
             use29BitCan = detect29BitCan()

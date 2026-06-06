@@ -186,7 +186,12 @@ class Obd2ActivationViewModel(app: Application) : AndroidViewModel(app) {
             )
             return
         }
-        // Log which CAN protocol was detected
+        // Log adapter identity and CAN protocol
+        activeStepLog += GmVcimActivation.StepResult(
+            "Adapter ID",
+            obd2Manager.adapterIdentity.isNotBlank() && obd2Manager.adapterIdentity != "?",
+            obd2Manager.adapterIdentity.ifBlank { "No ATI response" }
+        )
         activeStepLog += GmVcimActivation.StepResult(
             "Protocol detection",
             true,
