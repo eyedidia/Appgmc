@@ -24,6 +24,7 @@
         android:textStyle="bold" />
 
     <TextView
+        android:id="@+id/navHeaderVersion"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:text="@string/drawer_header_subtitle"

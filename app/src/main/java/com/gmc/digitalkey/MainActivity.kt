@@ -18,6 +18,7 @@ import androidx.navigation.ui.setupWithNavController
 import com.gmc.digitalkey.databinding.ActivityMainBinding
 import com.gmc.digitalkey.nfc.NfcKeyHandler
 import com.gmc.digitalkey.ble.BleManager
+import android.widget.TextView
 import com.google.android.material.navigation.NavigationView
 
 class MainActivity : AppCompatActivity() {
@@ -39,6 +40,11 @@ class MainActivity : AppCompatActivity() {
         // Set up DrawerLayout and NavigationView
         drawerLayout = binding.drawerLayout
         navView = binding.navView
+
+        // Stamp version into drawer header
+        navView.getHeaderView(0)
+            .findViewById<TextView>(R.id.navHeaderVersion)
+            ?.text = "v${BuildConfig.VERSION_NAME}  #${BuildConfig.VERSION_CODE}  ·  GM Digital Key Tool"
 
         // Hamburger button opens the drawer
         binding.btnHamburger.setOnClickListener {
