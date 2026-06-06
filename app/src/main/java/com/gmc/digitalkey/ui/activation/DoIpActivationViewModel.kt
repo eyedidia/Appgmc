@@ -87,8 +87,15 @@ class DoIpActivationViewModel(app: Application) : AndroidViewModel(app) {
                 DoIpManager.DiscoveryResult.NotFound -> {
                     activeStepLog += GmVcimActivation.StepResult("DoIP discovery", false, "TCP:13400 closed on all scanned IPs")
                     emitLogs()
+                    val consumerHotspotNote = if (netInfo != null &&
+                        (netInfo.first.startsWith("10.49.") || netInfo.first.startsWith("10."))) {
+                        "\n\n⚠ Your IP (${netInfo.first}) looks like the vehicle's OnStar consumer hotspot. " +
+                        "GM's OnStar Wi-Fi does NOT expose port 13400 — it's a passenger internet hotspot only, not a diagnostic network.\n\n" +
+                        "DoIP requires a Wi-Fi OBD2 adapter (vLinker MC+ Wi-Fi or OBDLink EX) plugged into the OBD2 port. " +
+                        "That adapter creates its own 192.168.0.x network and bridges CAN to IP."
+                    } else ""
                     _uiState.value = DoIpActivationState.ActivationError(
-                        "No vehicle found on Wi-Fi.\n\n$netNote\n\nCheck the log below for details. Make sure the phone is connected to the vehicle's Wi-Fi hotspot (not your home router), and the vehicle is in READY or ACC mode.",
+                        "No vehicle found on Wi-Fi.\n\n$netNote$consumerHotspotNote\n\nCheck the log below for details. Make sure the phone is connected to the vehicle's Wi-Fi hotspot (not your home router), and the vehicle is in READY or ACC mode.",
                         recoverable = true
                     )
                 }

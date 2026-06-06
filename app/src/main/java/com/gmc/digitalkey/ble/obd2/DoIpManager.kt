@@ -45,7 +45,6 @@ class DoIpManager(private val context: Context) {
         // K73 / VCIM DoIP logical addresses — ordered by probability for GM Ultium.
         // GM uses 0x0E8x range for telematics on Ultium; 0x0001/0x0002 for A11 Radio gateway.
         val VCIM_PROBE_ADDRS = listOf(
-            0x1E30,  // Vehicle 1E30 — logical address shown on Sierra EV infotainment pairing screen
             0x0E80,  // K73 Telematics primary (Ultium)
             0x0E81,  // K73 Telematics alt
             0x0E82,  // K73 Telematics alt
