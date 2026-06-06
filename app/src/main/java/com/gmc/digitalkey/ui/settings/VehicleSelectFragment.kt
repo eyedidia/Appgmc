@@ -78,7 +78,24 @@ class VehicleSelectFragment : Fragment() {
         }
 
         binding.btnObd2Activate.setOnClickListener {
-            findNavController().navigate(R.id.action_vehicle_select_to_obd2)
+            val selectedModel = when (binding.modelGroup.checkedRadioButtonId) {
+                binding.modelHummerPickup.id -> GmcEvModel.HUMMER_EV_PICKUP
+                binding.modelHummerSuv.id    -> GmcEvModel.HUMMER_EV_SUV
+                binding.modelSierraEv.id     -> GmcEvModel.SIERRA_EV_DENALI
+                binding.modelTerrainEv.id    -> GmcEvModel.TERRAIN_EV
+                binding.modelSilveradoEv.id  -> GmcEvModel.SILVERADO_EV
+                binding.modelBlazerEv.id     -> GmcEvModel.BLAZER_EV
+                binding.modelEquinoxEv.id    -> GmcEvModel.EQUINOX_EV
+                binding.modelLyriq.id        -> GmcEvModel.LYRIQ
+                binding.modelOptiq.id        -> GmcEvModel.OPTIQ
+                binding.modelVistiq.id       -> GmcEvModel.VISTIQ
+                binding.modelEscaladeIq.id   -> GmcEvModel.ESCALADE_IQ
+                else                         -> null
+            }
+            val args = Bundle().apply {
+                putString("modelKey", selectedModel?.name)
+            }
+            findNavController().navigate(R.id.action_vehicle_select_to_obd2, args)
         }
 
         binding.btnDoipActivate.setOnClickListener {

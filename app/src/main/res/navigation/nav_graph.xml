@@ -102,6 +102,11 @@
             app:argType="string"
             app:nullable="true"
             android:defaultValue="@null" />
+        <argument
+            android:name="modelKey"
+            app:argType="string"
+            app:nullable="true"
+            android:defaultValue="@null" />
         <action
             android:id="@+id/action_obd2_to_vehicle_select"
             app:destination="@id/vehicleSelectFragment" />

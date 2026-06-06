@@ -9,6 +9,7 @@ import com.gmc.digitalkey.ble.obd2.GmVcimActivation
 import com.gmc.digitalkey.ble.obd2.Obd2Manager
 import com.gmc.digitalkey.ble.obd2.Obd2State
 import com.gmc.digitalkey.db.AppDatabase
+import com.gmc.digitalkey.model.GmcEvModel
 import com.gmc.digitalkey.vin.VinDecoder
 import com.gmc.digitalkey.vin.VinInfo
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -67,6 +68,9 @@ class Obd2ActivationViewModel(app: Application) : AndroidViewModel(app) {
     private var vehicleId: String = ""
     private var discoveredVcimAddress: Int = 0x7E3
     private var pendingVinInfo: VinInfo? = null
+    private var selectedModel: GmcEvModel? = null
+
+    fun setVehicleModel(model: GmcEvModel?) { selectedModel = model }
 
     fun loadVehicleVin(id: String) {
         vehicleId = id
@@ -216,9 +220,9 @@ class Obd2ActivationViewModel(app: Application) : AndroidViewModel(app) {
         }
 
         _uiState.value = Obd2ActivationState.DiscoveringEcus
-        val ecus = GmVcimActivation.discoverEcus(obd2Manager, activeStepLog)
+        val ecus = GmVcimActivation.discoverEcus(obd2Manager, selectedModel, activeStepLog)
         emitStepLog()
-        discoveredVcimAddress = GmVcimActivation.findVcimAddress(obd2Manager, ecus, activeStepLog)
+        discoveredVcimAddress = GmVcimActivation.findVcimAddress(obd2Manager, ecus, selectedModel, activeStepLog)
         emitStepLog()
 
         activateBle()
@@ -227,9 +231,9 @@ class Obd2ActivationViewModel(app: Application) : AndroidViewModel(app) {
     fun proceedAfterVinMismatch() {
         viewModelScope.launch {
             _uiState.value = Obd2ActivationState.DiscoveringEcus
-            val ecus = GmVcimActivation.discoverEcus(obd2Manager, activeStepLog)
+            val ecus = GmVcimActivation.discoverEcus(obd2Manager, selectedModel, activeStepLog)
             emitStepLog()
-            discoveredVcimAddress = GmVcimActivation.findVcimAddress(obd2Manager, ecus, activeStepLog)
+            discoveredVcimAddress = GmVcimActivation.findVcimAddress(obd2Manager, ecus, selectedModel, activeStepLog)
             emitStepLog()
             activateBle()
         }
@@ -237,7 +241,7 @@ class Obd2ActivationViewModel(app: Application) : AndroidViewModel(app) {
 
     private suspend fun activateBle() {
         _uiState.value = Obd2ActivationState.ActivatingBle
-        when (val result = GmVcimActivation.activateDigitalKeyBle(obd2Manager, discoveredVcimAddress, activeStepLog)) {
+        when (val result = GmVcimActivation.activateDigitalKeyBle(obd2Manager, discoveredVcimAddress, selectedModel, activeStepLog)) {
             is GmVcimActivation.ActivationResult.Success -> {
                 emitStepLog()
                 if (vehicleId.isNotEmpty()) {

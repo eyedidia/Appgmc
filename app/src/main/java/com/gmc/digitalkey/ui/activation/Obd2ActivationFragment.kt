@@ -20,6 +20,7 @@ import androidx.lifecycle.lifecycleScope
 import androidx.navigation.fragment.findNavController
 import com.gmc.digitalkey.R
 import com.gmc.digitalkey.databinding.FragmentObd2ActivationBinding
+import com.gmc.digitalkey.model.GmcEvModel
 import com.google.android.material.card.MaterialCardView
 import kotlinx.coroutines.launch
 
@@ -41,6 +42,9 @@ class Obd2ActivationFragment : Fragment() {
         super.onViewCreated(view, savedInstanceState)
 
         arguments?.getString("vehicleId")?.let { viewModel.loadVehicleVin(it) }
+        arguments?.getString("modelKey")?.let { key ->
+            viewModel.setVehicleModel(GmcEvModel.fromKey(key))
+        }
 
         binding.btnStartScan.setOnClickListener { viewModel.startAdapterScan() }
         binding.btnConnectWifiObd.setOnClickListener {
