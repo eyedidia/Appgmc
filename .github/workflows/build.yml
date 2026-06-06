@@ -32,7 +32,7 @@ jobs:
 
       - name: KSP / Room annotation processing
         id: ksp
-        run: ./gradlew kspDebugKotlin --no-daemon --stacktrace 2>&1 | tee ksp.log; exit ${PIPESTATUS[0]}
+        run: ./gradlew kspDebugKotlin -PbuildNumber=${{ github.run_number }} --no-daemon --stacktrace 2>&1 | tee ksp.log; exit ${PIPESTATUS[0]}
         continue-on-error: true
 
       - name: Print KSP errors
@@ -45,7 +45,7 @@ jobs:
 
       - name: Compile Kotlin
         id: kotlinc
-        run: ./gradlew compileDebugKotlin --no-daemon --stacktrace 2>&1 | tee kotlinc.log; exit ${PIPESTATUS[0]}
+        run: ./gradlew compileDebugKotlin -PbuildNumber=${{ github.run_number }} --no-daemon --stacktrace 2>&1 | tee kotlinc.log; exit ${PIPESTATUS[0]}
         continue-on-error: true
 
       - name: Print Kotlin compiler errors
@@ -58,7 +58,7 @@ jobs:
 
       - name: Build Debug APK
         id: build
-        run: ./gradlew assembleDebug --no-daemon --stacktrace 2>&1 | tee build.log; exit ${PIPESTATUS[0]}
+        run: ./gradlew assembleDebug -PbuildNumber=${{ github.run_number }} --no-daemon --stacktrace 2>&1 | tee build.log; exit ${PIPESTATUS[0]}
 
       - name: Print build errors on failure
         if: failure() && steps.build.outcome == 'failure'
