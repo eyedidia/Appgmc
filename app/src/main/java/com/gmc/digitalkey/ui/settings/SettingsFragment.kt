@@ -23,6 +23,7 @@ import com.gmc.digitalkey.databinding.FragmentSettingsBinding
 import com.gmc.digitalkey.db.AppDatabase
 import com.gmc.digitalkey.db.VehicleEntity
 import com.gmc.digitalkey.model.GmcEvModel
+import com.gmc.digitalkey.vin.VinDecoder
 import kotlinx.coroutines.launch
 
 class SettingsFragment : Fragment() {
@@ -108,6 +109,11 @@ class SettingsFragment : Fragment() {
                     if (newVin.isEmpty()) return@setPositiveButton
                     viewLifecycleOwner.lifecycleScope.launch {
                         db.vehicleDao().updateVin(vehicle.id, newVin)
+                        // Re-fetch vehicle image for the new VIN
+                        val info = VinDecoder.decode(newVin)
+                        if (info != null && info.imageUrl.isNotEmpty()) {
+                            db.vehicleDao().updateImageUrl(vehicle.id, info.imageUrl)
+                        }
                     }
                 }
                 .setNegativeButton("Cancel", null)

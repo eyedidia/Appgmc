@@ -85,7 +85,7 @@
             app:chipBackgroundColor="@color/bg_card"
             app:chipStrokeColor="@color/gmc_red"
             app:chipStrokeWidth="1dp"
-            style="@style/Widget.Material3.Chip.Filter" />
+            style="@style/Widget.MaterialComponents.Chip.Filter" />
 
         <View
             android:layout_width="0dp"
@@ -98,7 +98,7 @@
             android:layout_height="wrap_content"
             android:text="@string/network_inspector_clear"
             android:textSize="12sp"
-            style="@style/Widget.Material3.Button.TextButton" />
+            style="@style/Widget.MaterialComponents.Button.TextButton" />
     </LinearLayout>
 
     <!-- Entry count -->
