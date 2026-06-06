@@ -106,7 +106,8 @@ class Obd2ActivationFragment : Fragment() {
         binding.btnGoToPairing.visibility = View.GONE
         binding.btnCopyExport.visibility = View.GONE
         binding.btnShowAllBle.visibility = View.GONE
-        binding.btnTryDoip.visibility = View.GONE
+        // DoIP button always visible — lets user jump to Wi-Fi path without running BLE scan first
+        binding.btnTryDoip.visibility = View.VISIBLE
 
         // Show AT terminal once we're past initialization
         val terminalVisible = state !is Obd2ActivationState.Idle &&

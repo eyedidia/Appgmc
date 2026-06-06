@@ -35,6 +35,9 @@
         <action
             android:id="@+id/action_vehicle_select_to_obd2"
             app:destination="@id/obd2ActivationFragment" />
+        <action
+            android:id="@+id/action_vehicle_select_to_doip"
+            app:destination="@id/doipActivationFragment" />
     </fragment>
 
     <fragment

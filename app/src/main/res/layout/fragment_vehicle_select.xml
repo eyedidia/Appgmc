@@ -381,6 +381,15 @@
                     android:textSize="12sp"
                     android:layout_marginTop="4dp" />
 
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btn_doip_activate"
+                    style="@style/Widget.GMC.Button.Outlined"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="Connect via Vehicle Wi-Fi (DoIP)"
+                    android:textSize="12sp"
+                    android:layout_marginTop="4dp" />
+
             </LinearLayout>
         </com.google.android.material.card.MaterialCardView>
 
