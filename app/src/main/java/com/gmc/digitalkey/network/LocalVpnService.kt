@@ -24,13 +24,13 @@ class LocalVpnService : VpnService() {
         @Volatile var isRunning = false
         val captureLog = NetworkCaptureServer()
 
-        private const val MAX_SESSIONS = 8
+        private const val MAX_SESSIONS = 64
     }
 
     private var vpnFd: ParcelFileDescriptor? = null
-    // Two separate bounded pools so DNS can't starve TCP threads and vice-versa
-    private val tcpPool = Executors.newFixedThreadPool(20)  // 8 sessions × 2 threads + headroom
-    private val dnsPool = Executors.newFixedThreadPool(6)
+    // Cached pool is safe now that pendingKeys prevents SYN-retransmit thread explosion
+    private val tcpPool = Executors.newCachedThreadPool()
+    private val dnsPool = Executors.newFixedThreadPool(8)
     private val sessions = ConcurrentHashMap<String, TcpSession>()
     // Tracks keys with a connect attempt in-flight (before session is registered)
     private val pendingKeys = ConcurrentHashMap.newKeySet<String>()
@@ -225,24 +225,39 @@ class LocalVpnService : VpnService() {
         }
     }
 
-    // ─── UDP — DNS only ───────────────────────────────────────────────────────
+    // ─── UDP ─────────────────────────────────────────────────────────────────
 
     private fun handleUdp(raw: ByteArray, len: Int, ihl: Int) {
         if (len < ihl + 8) return
         val srcIp   = raw.u32(12); val dstIp = raw.u32(16)
         val srcPort = raw.u16(ihl); val dstPort = raw.u16(ihl + 2)
-        if (dstPort != 53) return
         val udpLen  = raw.u16(ihl + 4) - 8
         if (udpLen <= 0) return
         val payload = raw.copyOfRange(ihl + 8, ihl + 8 + udpLen)
-        dnsPool.submit {
-            runCatching {
-                val ds = DatagramSocket().also { protect(it) }
-                ds.soTimeout = 5_000
-                ds.send(DatagramPacket(payload, payload.size, InetSocketAddress("8.8.8.8", 53)))
-                val resp = ByteArray(512); val dp = DatagramPacket(resp, resp.size)
-                ds.receive(dp); ds.close()
-                writeUdp(dstIp, srcIp, dstPort, srcPort, resp.copyOf(dp.length))
+
+        if (dstPort == 53) {
+            // DNS: intercept, forward to 8.8.8.8, return response
+            dnsPool.submit {
+                runCatching {
+                    val ds = DatagramSocket().also { protect(it) }
+                    ds.soTimeout = 5_000
+                    ds.send(DatagramPacket(payload, payload.size, InetSocketAddress("8.8.8.8", 53)))
+                    val resp = ByteArray(512); val dp = DatagramPacket(resp, resp.size)
+                    ds.receive(dp); ds.close()
+                    writeUdp(dstIp, srcIp, dstPort, srcPort, resp.copyOf(dp.length))
+                }
+            }
+        } else {
+            // Other UDP (QUIC, NTP, etc.): pass through without logging
+            dnsPool.submit {
+                runCatching {
+                    val ds = DatagramSocket().also { protect(it) }
+                    ds.soTimeout = 3_000
+                    ds.send(DatagramPacket(payload, payload.size, InetSocketAddress(ipStr(dstIp), dstPort)))
+                    val resp = ByteArray(2048); val dp = DatagramPacket(resp, resp.size)
+                    ds.receive(dp); ds.close()
+                    writeUdp(dstIp, srcIp, dstPort, srcPort, resp.copyOf(dp.length))
+                }
             }
         }
     }
