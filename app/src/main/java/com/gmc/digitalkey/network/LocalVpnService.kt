@@ -24,12 +24,16 @@ class LocalVpnService : VpnService() {
         @Volatile var isRunning = false
         val captureLog = NetworkCaptureServer()
 
-        private const val MAX_SESSIONS = 64
+        private const val MAX_SESSIONS = 8
     }
 
     private var vpnFd: ParcelFileDescriptor? = null
-    private val pool = Executors.newCachedThreadPool()
+    // Two separate bounded pools so DNS can't starve TCP threads and vice-versa
+    private val tcpPool = Executors.newFixedThreadPool(20)  // 8 sessions × 2 threads + headroom
+    private val dnsPool = Executors.newFixedThreadPool(6)
     private val sessions = ConcurrentHashMap<String, TcpSession>()
+    // Tracks keys with a connect attempt in-flight (before session is registered)
+    private val pendingKeys = ConcurrentHashMap.newKeySet<String>()
     @Volatile private var tunOut: FileOutputStream? = null
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -60,13 +64,14 @@ class LocalVpnService : VpnService() {
         tunOut = FileOutputStream(fd.fileDescriptor)
         isRunning = true
         captureLog.addEntry("SYS", "vpn", "active ✓")
-        pool.submit { runLoop(fd) }
+        tcpPool.submit { runLoop(fd) }
     }
 
     private fun stopVpn() {
         isRunning = false
         sessions.values.forEach { it.close() }
         sessions.clear()
+        pendingKeys.clear()
         tunOut = null
         runCatching { vpnFd?.close() }
         vpnFd = null
@@ -83,9 +88,9 @@ class LocalVpnService : VpnService() {
             while (isRunning) {
                 val n = input.read(buf)
                 if (n <= 0) continue
-                handlePacket(buf.copyOf(n), n)
+                handlePacket(buf, n)    // buf passed directly — no copy in hot path
             }
-        } catch (e: Exception) {
+        } catch (e: Throwable) {        // catches Error (OOM) as well as Exception
             captureLog.addEntry("SYS", "loop", "died: ${e.javaClass.simpleName} ${e.message}")
         } finally {
             runCatching { input.close() }
@@ -112,7 +117,7 @@ class LocalVpnService : VpnService() {
         val dataOff  = ((raw[ihl + 12].toInt() and 0xFF) shr 4) * 4
         val flags    = raw[ihl + 13].toInt() and 0xFF
         val payOff   = ihl + dataOff
-        val payload  = if (payOff < len) raw.copyOfRange(payOff, len) else ByteArray(0)
+        val payload  = if (payOff < len) raw.copyOfRange(payOff, len) else null
         val key      = "$srcIp:$srcPort"
 
         val syn = (flags and 0x02) != 0
@@ -121,30 +126,36 @@ class LocalVpnService : VpnService() {
         val rst = (flags and 0x04) != 0
 
         when {
-            rst || fin -> sessions.remove(key)?.close()
-            syn && !ack -> {
-                if (sessions.size < MAX_SESSIONS)
-                    spawnConnection(key, srcIp, dstIp, srcPort, dstPort, theirSeq)
-                else
-                    writeTcp(dstIp, srcIp, dstPort, srcPort, 0, theirSeq + 1, 0x14)
+            rst || fin -> {
+                pendingKeys.remove(key)
+                sessions.remove(key)?.close()
             }
-            // Data for an already-established session — enqueue, never block runLoop
-            payload.isNotEmpty() -> {
+            syn && !ack -> {
+                // Skip retransmitted SYNs — session already established or connect in-flight
+                if (sessions.containsKey(key) || pendingKeys.contains(key)) return
+                if (sessions.size + pendingKeys.size >= MAX_SESSIONS) {
+                    writeTcp(dstIp, srcIp, dstPort, srcPort, 0, theirSeq + 1, 0x14)
+                    return
+                }
+                pendingKeys.add(key)
+                spawnConnection(key, srcIp, dstIp, srcPort, dstPort, theirSeq)
+            }
+            payload != null && payload.isNotEmpty() -> {
                 val session = sessions[key] ?: return
                 session.theirAck.addAndGet(payload.size)
                 logIfFirst(session, payload, dstIp, dstPort)
-                session.sendQueue.offer(payload)   // non-blocking drop-if-full
+                session.sendQueue.offer(payload)   // non-blocking, drops if full
                 writeTcp(session.dstIp, session.srcIp, session.dstPort, session.srcPort,
                          session.ourSeq.get(), session.theirAck.get(), 0x10)
             }
         }
     }
 
-    // One pool thread per new TCP connection — blocks on connect, then forwards queued data
+    // One pair of pool threads per new TCP connection
     private fun spawnConnection(
         key: String, srcIp: Int, dstIp: Int, srcPort: Int, dstPort: Int, theirSeq: Int
     ) {
-        pool.submit {
+        tcpPool.submit {
             val sock = runCatching {
                 Socket().also {
                     protect(it)
@@ -152,6 +163,7 @@ class LocalVpnService : VpnService() {
                     it.soTimeout = 30_000
                 }
             }.getOrElse {
+                pendingKeys.remove(key)
                 writeTcp(dstIp, srcIp, dstPort, srcPort, 0, theirSeq + 1, 0x14)
                 return@submit
             }
@@ -160,14 +172,15 @@ class LocalVpnService : VpnService() {
             val theirAck = AtomicInteger(theirSeq + 1)
             val session  = TcpSession(srcIp, dstIp, srcPort, dstPort, ourSeq, theirAck, sock)
             sessions[key] = session
+            pendingKeys.remove(key)
 
             writeTcp(dstIp, srcIp, dstPort, srcPort, ourSeq.get(), theirAck.get(), 0x12)
             ourSeq.incrementAndGet()
 
-            // Second pool thread: server → client relay
-            pool.submit { relayFromServer(key, session) }
+            // Second thread: server → client relay
+            tcpPool.submit { relayFromServer(key, session) }
 
-            // This thread: drain sendQueue → server (blocking writes stay off runLoop)
+            // This thread: drain sendQueue → server (blocking writes off runLoop)
             try {
                 val out = sock.getOutputStream()
                 while (isRunning && sessions.containsKey(key)) {
@@ -222,7 +235,7 @@ class LocalVpnService : VpnService() {
         val udpLen  = raw.u16(ihl + 4) - 8
         if (udpLen <= 0) return
         val payload = raw.copyOfRange(ihl + 8, ihl + 8 + udpLen)
-        pool.submit {
+        dnsPool.submit {
             runCatching {
                 val ds = DatagramSocket().also { protect(it) }
                 ds.soTimeout = 5_000
