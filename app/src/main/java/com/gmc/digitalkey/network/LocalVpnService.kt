@@ -1,13 +1,8 @@
 package com.gmc.digitalkey.network
 
-import android.app.NotificationChannel
-import android.app.NotificationManager
 import android.content.Intent
 import android.net.VpnService
-import android.os.Build
 import android.os.ParcelFileDescriptor
-import androidx.core.app.NotificationCompat
-import com.gmc.digitalkey.R
 import java.io.FileInputStream
 import java.io.FileOutputStream
 import java.net.DatagramPacket
@@ -23,8 +18,6 @@ class LocalVpnService : VpnService() {
     companion object {
         const val ACTION_START = "com.gmc.digitalkey.VPN_START"
         const val ACTION_STOP  = "com.gmc.digitalkey.VPN_STOP"
-        private const val NOTIF_CHANNEL = "vpn_capture"
-        private const val NOTIF_ID = 9001
 
         @Volatile var isRunning = false
         val captureLog = NetworkCaptureServer()
@@ -44,7 +37,6 @@ class LocalVpnService : VpnService() {
     private fun startVpn() {
         if (isRunning) return
         captureLog.clearLog()
-        createNotifChannel()
 
         vpnFd = Builder()
             .setSession("YMGMC Inspector")
@@ -55,7 +47,6 @@ class LocalVpnService : VpnService() {
             .establish() ?: return
 
         isRunning = true
-        startForeground(NOTIF_ID, buildNotif())
         pool.submit { runLoop() }
     }
 
@@ -64,7 +55,6 @@ class LocalVpnService : VpnService() {
         vpnFd?.close(); vpnFd = null
         sessions.values.forEach { it.close() }
         sessions.clear()
-        stopForeground(true)
         stopSelf()
     }
 
@@ -311,22 +301,6 @@ class LocalVpnService : VpnService() {
 
     private fun ipStr(ip: Int) = "%d.%d.%d.%d".format(
         (ip shr 24) and 0xFF, (ip shr 16) and 0xFF, (ip shr 8) and 0xFF, ip and 0xFF)
-
-    // ─── Notification ─────────────────────────────────────────────────────────
-
-    private fun createNotifChannel() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            val ch = NotificationChannel(NOTIF_CHANNEL, "Traffic Inspector", NotificationManager.IMPORTANCE_LOW)
-            getSystemService(NotificationManager::class.java).createNotificationChannel(ch)
-        }
-    }
-
-    private fun buildNotif() = NotificationCompat.Builder(this, NOTIF_CHANNEL)
-        .setSmallIcon(R.drawable.ic_ble)
-        .setContentTitle("YMGMC Traffic Inspector")
-        .setContentText("Capturing traffic…")
-        .setPriority(NotificationCompat.PRIORITY_LOW)
-        .build()
 
     override fun onDestroy() { stopVpn(); super.onDestroy() }
 }
