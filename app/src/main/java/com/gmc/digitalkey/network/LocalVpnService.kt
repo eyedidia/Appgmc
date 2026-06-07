@@ -11,6 +11,8 @@ import java.net.InetSocketAddress
 import java.net.Socket
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.Executors
+import java.util.concurrent.LinkedBlockingQueue
+import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicInteger
 
 class LocalVpnService : VpnService() {
@@ -22,15 +24,12 @@ class LocalVpnService : VpnService() {
         @Volatile var isRunning = false
         val captureLog = NetworkCaptureServer()
 
-        private const val MAX_SESSIONS = 128
+        private const val MAX_SESSIONS = 64
     }
 
     private var vpnFd: ParcelFileDescriptor? = null
-    // One thread per active TCP connection (blocking relay loop) + short-lived DNS threads
     private val pool = Executors.newCachedThreadPool()
-    // key = "$srcIp:$srcPort"
     private val sessions = ConcurrentHashMap<String, TcpSession>()
-    // TUN output — written by pool threads, synchronized
     @Volatile private var tunOut: FileOutputStream? = null
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -42,40 +41,55 @@ class LocalVpnService : VpnService() {
     private fun startVpn() {
         if (isRunning) return
         captureLog.clearLog()
+        captureLog.addEntry("SYS", "vpn", "starting…")
 
-        val fd = Builder()
-            .setSession("YMGMC Inspector")
-            .addAddress("10.0.0.2", 32)
-            .addDnsServer("8.8.8.8")
-            .addRoute("0.0.0.0", 0)
-            .setMtu(1500)
-            .establish() ?: return
+        val fd = runCatching {
+            Builder()
+                .setSession("YMGMC Inspector")
+                .addAddress("10.0.0.2", 32)
+                .addDnsServer("8.8.8.8")
+                .addRoute("0.0.0.0", 0)
+                .setMtu(1500)
+                .establish()
+        }.getOrNull() ?: run {
+            captureLog.addEntry("SYS", "vpn", "establish() failed")
+            return
+        }
 
-        vpnFd = fd
-        isRunning = true
+        vpnFd  = fd
         tunOut = FileOutputStream(fd.fileDescriptor)
+        isRunning = true
+        captureLog.addEntry("SYS", "vpn", "active ✓")
         pool.submit { runLoop(fd) }
     }
 
     private fun stopVpn() {
         isRunning = false
-        vpnFd?.close(); vpnFd = null; tunOut = null
         sessions.values.forEach { it.close() }
         sessions.clear()
+        tunOut = null
+        runCatching { vpnFd?.close() }
+        vpnFd = null
         stopSelf()
     }
 
-    // ─── Main packet loop — processes inline, no per-packet thread ───────────
+    // ─── Main read loop — processes packets inline, never submits to pool ─────
 
     private fun runLoop(fd: ParcelFileDescriptor) {
+        captureLog.addEntry("SYS", "loop", "started")
         val input = FileInputStream(fd.fileDescriptor)
         val buf   = ByteArray(32767)
-        while (isRunning) {
-            val n = runCatching { input.read(buf) }.getOrDefault(-1)
-            if (n <= 0) continue
-            handlePacket(buf.copyOf(n), n)   // inline — never blocks for long
+        try {
+            while (isRunning) {
+                val n = input.read(buf)
+                if (n <= 0) continue
+                handlePacket(buf.copyOf(n), n)
+            }
+        } catch (e: Exception) {
+            captureLog.addEntry("SYS", "loop", "died: ${e.javaClass.simpleName} ${e.message}")
+        } finally {
+            runCatching { input.close() }
         }
-        runCatching { input.close() }
     }
 
     private fun handlePacket(raw: ByteArray, len: Int) {
@@ -92,8 +106,8 @@ class LocalVpnService : VpnService() {
 
     private fun handleTcp(raw: ByteArray, len: Int, ihl: Int) {
         if (len < ihl + 20) return
-        val srcIp   = raw.u32(12); val dstIp   = raw.u32(16)
-        val srcPort = raw.u16(ihl); val dstPort = raw.u16(ihl + 2)
+        val srcIp    = raw.u32(12);  val dstIp   = raw.u32(16)
+        val srcPort  = raw.u16(ihl); val dstPort = raw.u16(ihl + 2)
         val theirSeq = raw.u32(ihl + 4)
         val dataOff  = ((raw[ihl + 12].toInt() and 0xFF) shr 4) * 4
         val flags    = raw[ihl + 13].toInt() and 0xFF
@@ -114,28 +128,30 @@ class LocalVpnService : VpnService() {
                 else
                     writeTcp(dstIp, srcIp, dstPort, srcPort, 0, theirSeq + 1, 0x14)
             }
+            // Data for an already-established session — enqueue, never block runLoop
             payload.isNotEmpty() -> {
                 val session = sessions[key] ?: return
-                session.theirAck.set(theirSeq + payload.size)
+                session.theirAck.addAndGet(payload.size)
                 logIfFirst(session, payload, dstIp, dstPort)
-                // forward to real server — quick write, stays inline
-                runCatching { session.socket.getOutputStream().also { it.write(payload); it.flush() } }
+                session.sendQueue.offer(payload)   // non-blocking drop-if-full
                 writeTcp(session.dstIp, session.srcIp, session.dstPort, session.srcPort,
                          session.ourSeq.get(), session.theirAck.get(), 0x10)
             }
         }
     }
 
-    // Spawns one pool thread per new TCP connection — does blocking connect then relay
+    // One pool thread per new TCP connection — blocks on connect, then forwards queued data
     private fun spawnConnection(
         key: String, srcIp: Int, dstIp: Int, srcPort: Int, dstPort: Int, theirSeq: Int
     ) {
         pool.submit {
             val sock = runCatching {
-                Socket().also { protect(it); it.connect(InetSocketAddress(ipStr(dstIp), dstPort), 10_000); it.soTimeout = 30_000 }
-            }.getOrNull()
-
-            if (sock == null) {
+                Socket().also {
+                    protect(it)
+                    it.connect(InetSocketAddress(ipStr(dstIp), dstPort), 8_000)
+                    it.soTimeout = 30_000
+                }
+            }.getOrElse {
                 writeTcp(dstIp, srcIp, dstPort, srcPort, 0, theirSeq + 1, 0x14)
                 return@submit
             }
@@ -145,32 +161,47 @@ class LocalVpnService : VpnService() {
             val session  = TcpSession(srcIp, dstIp, srcPort, dstPort, ourSeq, theirAck, sock)
             sessions[key] = session
 
-            writeTcp(dstIp, srcIp, dstPort, srcPort, ourSeq.get(), theirAck.get(), 0x12)  // SYN+ACK
+            writeTcp(dstIp, srcIp, dstPort, srcPort, ourSeq.get(), theirAck.get(), 0x12)
             ourSeq.incrementAndGet()
 
-            // Relay server → client (this thread now becomes the relay loop)
-            val buf = ByteArray(8192)
+            // Second pool thread: server → client relay
+            pool.submit { relayFromServer(key, session) }
+
+            // This thread: drain sendQueue → server (blocking writes stay off runLoop)
             try {
-                var n = sock.getInputStream().read(buf)
-                while (n > 0 && isRunning && sessions.containsKey(key)) {
-                    val data = buf.copyOf(n)
-                    writeTcp(session.dstIp, session.srcIp, session.dstPort, session.srcPort,
-                             session.ourSeq.get(), session.theirAck.get(), 0x18, data)
-                    session.ourSeq.addAndGet(n)
-                    n = sock.getInputStream().read(buf)
+                val out = sock.getOutputStream()
+                while (isRunning && sessions.containsKey(key)) {
+                    val data = session.sendQueue.poll(200, TimeUnit.MILLISECONDS) ?: continue
+                    out.write(data); out.flush()
                 }
             } catch (_: Exception) {}
-            writeTcp(session.dstIp, session.srcIp, session.dstPort, session.srcPort,
-                     session.ourSeq.get(), session.theirAck.get(), 0x11)  // FIN+ACK
             sessions.remove(key)?.close()
         }
+    }
+
+    private fun relayFromServer(key: String, session: TcpSession) {
+        val buf = ByteArray(8192)
+        try {
+            val inp = session.socket.getInputStream()
+            var n   = inp.read(buf)
+            while (n > 0 && isRunning && sessions.containsKey(key)) {
+                val data = buf.copyOf(n)
+                writeTcp(session.dstIp, session.srcIp, session.dstPort, session.srcPort,
+                         session.ourSeq.get(), session.theirAck.get(), 0x18, data)
+                session.ourSeq.addAndGet(n)
+                n = inp.read(buf)
+            }
+        } catch (_: Exception) {}
+        writeTcp(session.dstIp, session.srcIp, session.dstPort, session.srcPort,
+                 session.ourSeq.get(), session.theirAck.get(), 0x11)
+        sessions.remove(key)?.close()
     }
 
     private fun logIfFirst(session: TcpSession, payload: ByteArray, dstIp: Int, dstPort: Int) {
         if (session.logged) return
         session.logged = true
         if (dstPort == 443) {
-            val sni  = NetworkCaptureServer.extractSni(payload, payload.size) ?: ""
+            val sni = NetworkCaptureServer.extractSni(payload, payload.size) ?: ""
             captureLog.addEntry("HTTPS", if (sni.isNotEmpty()) sni else ipStr(dstIp), "", sni)
         } else {
             captureLog.addEntry(
@@ -181,11 +212,11 @@ class LocalVpnService : VpnService() {
         }
     }
 
-    // ─── UDP — DNS only, short-lived pool thread ──────────────────────────────
+    // ─── UDP — DNS only ───────────────────────────────────────────────────────
 
     private fun handleUdp(raw: ByteArray, len: Int, ihl: Int) {
         if (len < ihl + 8) return
-        val srcIp   = raw.u32(12); val dstIp   = raw.u32(16)
+        val srcIp   = raw.u32(12); val dstIp = raw.u32(16)
         val srcPort = raw.u16(ihl); val dstPort = raw.u16(ihl + 2)
         if (dstPort != 53) return
         val udpLen  = raw.u16(ihl + 4) - 8
@@ -297,7 +328,8 @@ data class TcpSession(
     val ourSeq: AtomicInteger,
     val theirAck: AtomicInteger,
     val socket: Socket,
-    @Volatile var logged: Boolean = false
+    @Volatile var logged: Boolean = false,
+    val sendQueue: LinkedBlockingQueue<ByteArray> = LinkedBlockingQueue(128)
 ) {
     fun close() = runCatching { socket.close() }
 }
