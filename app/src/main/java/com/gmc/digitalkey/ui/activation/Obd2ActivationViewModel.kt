@@ -87,14 +87,13 @@ class Obd2ActivationViewModel(app: Application) : AndroidViewModel(app) {
         // Add already-paired Classic BT devices first
         obd2Manager.getClassicBtDevices().forEach { addAdapter(it) }
 
-        // Unfiltered BLE scan — shows all nearby BLE devices including adapters
-        // that don't advertise standard ELM327 service UUIDs (FFF0/FFE0)
-        obd2Manager.scanForAllBleAdapters(
+        // Filtered scan — only FFF0/FFE0/NUS service UUIDs + OBD2 name hints
+        obd2Manager.scanForObd2Adapters(
             onFound = { device -> addAdapter(device) },
             onStopped = {
                 if (_foundAdapters.value.isEmpty()) {
                     _uiState.value = Obd2ActivationState.ActivationError(
-                        "No Bluetooth devices found nearby.\nMake sure the adapter is plugged into the OBD2 port and phone Bluetooth is on.",
+                        "No OBD2 adapter found.\nMake sure the adapter is plugged in and Bluetooth is on.\n\nTap 'Show All Devices' to see everything nearby.",
                         recoverable = true
                     )
                 }

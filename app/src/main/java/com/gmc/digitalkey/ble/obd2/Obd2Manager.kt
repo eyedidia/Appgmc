@@ -166,6 +166,54 @@ class Obd2Manager(private val context: Context) {
         }, 15_000)
     }
 
+    /** Filtered scan: only devices advertising FFF0/FFE0/NUS service UUIDs or matching OBD2 name hints.
+     *  This is the default scan shown to users — avoids the "monster list" of all nearby BLE devices. */
+    fun scanForObd2Adapters(onFound: (BluetoothDevice) -> Unit, onStopped: () -> Unit = {}) {
+        _state.value = Obd2State.Scanning
+        val scanner = adapter.bluetoothLeScanner
+        val settings = ScanSettings.Builder()
+            .setScanMode(ScanSettings.SCAN_MODE_LOW_LATENCY)
+            .build()
+
+        // Filter by service UUID — catches devices that advertise their OBD2 service
+        val serviceFilters = listOf(
+            ScanFilter.Builder().setServiceUuid(ParcelUuid(Elm327GattProfile.SERVICE_FFF0)).build(),
+            ScanFilter.Builder().setServiceUuid(ParcelUuid(Elm327GattProfile.SERVICE_FFE0)).build(),
+            ScanFilter.Builder().setServiceUuid(ParcelUuid(Elm327GattProfile.SERVICE_NUS)).build(),
+        )
+        val found = mutableSetOf<String>()
+
+        val filteredCb = object : ScanCallback() {
+            override fun onScanResult(callbackType: Int, result: ScanResult) {
+                if (found.add(result.device.address)) onFound(result.device)
+            }
+            override fun onScanFailed(errorCode: Int) { /* will be caught by unfiltered below */ }
+        }
+
+        // Also run an unfiltered scan in parallel to catch adapters that don't include service UUID
+        // in their advertisement — filter by name hint instead.
+        val nameCb = object : ScanCallback() {
+            override fun onScanResult(callbackType: Int, result: ScanResult) {
+                val name = runCatching { result.device.name }.getOrNull() ?: return
+                if (Elm327GattProfile.ELM_NAME_HINTS.any { name.contains(it, ignoreCase = true) }) {
+                    if (found.add(result.device.address)) onFound(result.device)
+                }
+            }
+            override fun onScanFailed(errorCode: Int) {}
+        }
+
+        scanner.startScan(serviceFilters, settings, filteredCb)
+        scanner.startScan(null, settings, nameCb)
+
+        handler.postDelayed({
+            scanner.stopScan(filteredCb)
+            scanner.stopScan(nameCb)
+            if (_state.value is Obd2State.Scanning) _state.value = Obd2State.Idle
+            onStopped()
+        }, 12_000)
+    }
+
+    /** Unfiltered scan — shows ALL nearby BLE devices. Only used when user taps "Show All". */
     fun scanForAllBleAdapters(onFound: (BluetoothDevice) -> Unit, onStopped: () -> Unit = {}) {
         _state.value = Obd2State.Scanning
         val scanner = adapter.bluetoothLeScanner
