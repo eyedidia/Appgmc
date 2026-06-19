@@ -824,11 +824,22 @@ class Obd2Manager(private val context: Context) {
             }
             val desc = rxChar.getDescriptor(Elm327GattProfile.DESC_CCCD)
             if (desc != null) {
-                // Write NOTIFY+INDICATE (0x03) — some adapters advertise NOTIFY but behave as INDICATE
-                desc.value = byteArrayOf(0x03.toByte(), 0x00.toByte())
+                // Use only the bits the characteristic actually supports.
+                // Sending INDICATE bit (0x02) when the adapter only supports NOTIFY causes
+                // some stacks to reject the write, silently disabling all notifications.
+                val indicateSupported = rxChar.properties and
+                    BluetoothGattCharacteristic.PROPERTY_INDICATE != 0
+                val notifySupported = rxChar.properties and
+                    BluetoothGattCharacteristic.PROPERTY_NOTIFY != 0
+                val cccdByte: Byte = when {
+                    notifySupported && indicateSupported -> 0x03
+                    indicateSupported                   -> 0x02
+                    else                                -> 0x01  // NOTIFY only (most ELM327 clones)
+                }
+                desc.value = byteArrayOf(cccdByte, 0x00.toByte())
                 val writeOk = gatt.writeDescriptor(desc)
                 synchronized(_commandLog) {
-                    _commandLog.add("BLE setup" to "CCCD write queued=${writeOk}")
+                    _commandLog.add("BLE setup" to "CCCD write queued=${writeOk} value=0x${"%02X".format(cccdByte)}")
                 }
             } else {
                 synchronized(_commandLog) {
