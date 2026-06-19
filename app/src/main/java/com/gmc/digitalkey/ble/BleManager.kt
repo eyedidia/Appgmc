@@ -116,7 +116,10 @@ class BleManager(private val context: Context) {
             override fun onScanResult(callbackType: Int, result: ScanResult) {
                 val advertisedUuids = result.scanRecord?.serviceUuids?.toSet() ?: emptySet()
                 val hasGmService = advertisedUuids.any { it in gmParcelUuids }
-                onFound(result.device, result.rssi, hasGmService)
+                // Also flag GM by manufacturer company ID 0x005D (covers FD06-series "GR-AC" vehicles
+                // that advertise the service UUID only in the GATT table, not in the scan record)
+                val hasGmMfr = result.scanRecord?.manufacturerSpecificData?.get(0x005D) != null
+                onFound(result.device, result.rssi, hasGmService || hasGmMfr)
             }
             override fun onScanFailed(errorCode: Int) {
                 _connectionState.value = BleConnectionState.Error("BLE scan failed: $errorCode")

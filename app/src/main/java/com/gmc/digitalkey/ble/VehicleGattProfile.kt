@@ -56,9 +56,20 @@ object VehicleGattProfile {
     val CHAR_STATUS:    UUID = CHAR_SERVER_WRITE   // car → phone: status events (same channel)
     val CHAR_CHARGING:  UUID = CHAR_SERVER_WRITE   // car → phone: charging events (same channel)
 
+    // ── FD06-series BLE stack (GR-AC devices: Bolt EV / Equinox / older models) ─
+    // Observed: "GR-AC_10001_09_9bf1_SC", MAC 94:24:B8:45:9B:F1
+    // Base UUID: 173C-93D2-488E-FE144D2E12A2 (GM proprietary base)
+    val SERVICE_FD06: UUID   = UUID.fromString("0000FD06-173C-93D2-488E-FE144D2E12A2")
+    val CHAR_FD03_WRITE: UUID = UUID.fromString("0000FD03-0000-1000-8000-00805F9B34FB")  // phone → vehicle
+    val CHAR_FD04_NOTIFY: UUID = UUID.fromString("0000FD04-0000-1000-8000-00805F9B34FB") // vehicle → phone
+    val CHAR_FD05_INFO: UUID  = UUID.fromString("0000FD05-0000-1000-8000-00805F9B34FB")  // static (VIN? token?)
+    val CHAR_FD06_INFO: UUID  = UUID.fromString("0000FD06-0000-1000-8000-00805F9B34FB")  // static
+    val CHAR_FD07_INFO: UUID  = UUID.fromString("0000FD07-0000-1000-8000-00805F9B34FB")  // static
+
     /** Service UUIDs to flag in BLE scan — device lit green in raw scan when advertising any of these. */
     val SCAN_SERVICE_UUIDS = listOf(
-        SERVICE_UUID,                               // 48B42B00 — confirmed main DK service
+        SERVICE_UUID,                               // 48B42B00 — confirmed main DK service (Sierra EV / Ultium)
+        SERVICE_FD06,                               // FD06     — confirmed GR-AC devices (older/different protocol)
         SERVICE_DIRECT_DK,                          // 4CDABAA0 — secondary BLE module
         V2_SERVICE_UUID,                            // 5EFD8B16 — unconfirmed V2 variant
         VIPKIT_UUID_1, VIPKIT_UUID_2, VIPKIT_UUID_3 // VipKit (unconfirmed)
