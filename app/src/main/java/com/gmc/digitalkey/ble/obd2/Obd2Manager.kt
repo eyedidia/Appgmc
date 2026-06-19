@@ -523,9 +523,26 @@ class Obd2Manager(private val context: Context) {
             // Let BLE NOTIFY settle after CCCD write — professional coding adapters need this.
             delay(1_500)
 
-            // Wake-up: some adapters need an empty CR to flush their input buffer.
-            // Try both \r and \r\n variants since some adapters require CRLF.
-            try { sendCommand("", 800) } catch (_: Exception) {}
+            // Probe the adapter. ELM327 ignores a bare CR and returns '>'.
+            // OBD Coding Pro proprietary protocol responds with "{CODE},{STATUS},{DATA};\r\n".
+            val probeResp = try { sendCommand("", 2_000) } catch (_: Exception) { "" }
+
+            // Pattern: decimal number, comma, hex-or-decimal digits, comma, optional data
+            // Examples: "24,00," (ping-ok) or "25,15,Error no such command"
+            val isProprietaryProtocol = probeResp.matches(Regex("\\d{2,},\\w+,.*"))
+            if (isProprietaryProtocol) {
+                synchronized(_commandLog) {
+                    _commandLog.add("Protocol" to
+                        "OBD Coding Pro proprietary detected (not ELM327). Probe: \"$probeResp\"")
+                    _commandLog.add("Info" to
+                        "Use AT terminal to explore commands. Known format: {CODE},{LEN_HEX},{DATA};")
+                }
+                adapterIdentity = "OBD Coding Pro (proprietary)"
+                _state.value = Obd2State.Ready   // allow AT terminal to function
+                return true
+            }
+
+            // ELM327 path — send standard initialization sequence
             delay(300)
             try { sendCommand("\n", 500) } catch (_: Exception) {}
             delay(200)
@@ -706,6 +723,28 @@ class Obd2Manager(private val context: Context) {
             .map { it.toInt(16).toByte() }
             .toByteArray()
 
+    // Unified response extractor — handles both ELM327 ('>' prompt) and proprietary (';' terminated).
+    // Called from onCharacteristicChanged and onCharacteristicRead.
+    private fun extractResponse() {
+        val buf = rxBuffer.toString()
+        val (response, consumed) = when {
+            // ELM327: response ends with '>' prompt
+            buf.contains('>') ->
+                buf.substringBefore('>').trim() to true
+            // OBD Coding Pro proprietary: response ends with ';\r\n' or just ';' at end of buffer
+            buf.contains(";\r\n") ->
+                buf.substringBefore(";\r\n").trim() to true
+            buf.trimEnd().endsWith(';') ->
+                buf.trimEnd().trimEnd(';').trim() to true
+            else -> null to false
+        }
+        if (consumed && response != null) {
+            rxBuffer.clear()
+            pendingResponse?.complete(response)
+            pendingResponse = null
+        }
+    }
+
     // Scan all non-standard GATT services for a characteristic with WRITE + separate NOTIFY,
     // or a single characteristic that has both WRITE and NOTIFY (like FFE1).
     private fun autoDetectGattLayout(gatt: BluetoothGatt): Elm327GattProfile.GattLayout? {
@@ -856,12 +895,7 @@ class Obd2Manager(private val context: Context) {
             val chunk = String(raw, Charsets.US_ASCII)
             if (chunk.isBlank()) return
             rxBuffer.append(chunk)
-            if (rxBuffer.contains('>')) {
-                val response = rxBuffer.toString().substringBefore('>').trim()
-                rxBuffer.clear()
-                pendingResponse?.complete(response)
-                pendingResponse = null
-            }
+            extractResponse()
         }
 
         override fun onCharacteristicWrite(gatt: BluetoothGatt, char: BluetoothGattCharacteristic, status: Int) {
@@ -879,12 +913,7 @@ class Obd2Manager(private val context: Context) {
                     "${char.uuid.toString().uppercase().take(8)} bytes=${raw.size} data=${chunk.take(40).replace("\r","\\r").replace("\n","\\n")}")
             }
             rxBuffer.append(chunk)
-            if (rxBuffer.contains('>')) {
-                val response = rxBuffer.toString().substringBefore('>').trim()
-                rxBuffer.clear()
-                pendingResponse?.complete(response)
-                pendingResponse = null
-            }
+            extractResponse()
         }
 
         override fun onDescriptorWrite(gatt: BluetoothGatt, descriptor: BluetoothGattDescriptor, status: Int) {
