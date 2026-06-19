@@ -410,13 +410,14 @@ class Obd2Manager(private val context: Context) {
                 rxBuffer.clear()
                 val deferred = CompletableDeferred<String>()
                 pendingResponse = deferred
-                // Use write type that the characteristic actually advertises.
-                // Forcing WRITE_NO_RESPONSE on a WRITE-only char silently drops the data.
+                // Prefer WRITE_TYPE_DEFAULT (acknowledged) when the characteristic supports it —
+                // coding/professional adapters may ignore WRITE_NO_RESPONSE silently.
+                // Fall back to WRITE_NO_RESPONSE only when WRITE is not available.
                 txChar.writeType = if (txChar.properties and
-                    BluetoothGattCharacteristic.PROPERTY_WRITE_NO_RESPONSE != 0)
-                    BluetoothGattCharacteristic.WRITE_TYPE_NO_RESPONSE
-                else
+                    BluetoothGattCharacteristic.PROPERTY_WRITE != 0)
                     BluetoothGattCharacteristic.WRITE_TYPE_DEFAULT
+                else
+                    BluetoothGattCharacteristic.WRITE_TYPE_NO_RESPONSE
                 txChar.value = (cmd + "\r").toByteArray(Charsets.US_ASCII)
                 val writeOk = g.writeCharacteristic(txChar)
                 if (!writeOk) {
@@ -468,10 +469,15 @@ class Obd2Manager(private val context: Context) {
         use29BitCan = false
         adapterIdentity = ""
         return try {
-            // Wake-up: some adapters (non-ELM327, professional coding adapters) need an empty
-            // CR to flush their input buffer before responding to ATZ.
+            // Let BLE NOTIFY settle after CCCD write — professional coding adapters need this.
+            delay(1_500)
+
+            // Wake-up: some adapters need an empty CR to flush their input buffer.
+            // Try both \r and \r\n variants since some adapters require CRLF.
             try { sendCommand("", 800) } catch (_: Exception) {}
             delay(300)
+            try { sendCommand("\n", 500) } catch (_: Exception) {}
+            delay(200)
 
             sendCommand("ATZ", 5_000)
             delay(1_200)

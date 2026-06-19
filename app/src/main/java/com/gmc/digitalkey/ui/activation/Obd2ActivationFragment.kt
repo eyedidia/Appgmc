@@ -113,13 +113,12 @@ class Obd2ActivationFragment : Fragment() {
         // DoIP button always visible — lets user jump to Wi-Fi path without running BLE scan first
         binding.btnTryDoip.visibility = View.VISIBLE
 
-        // Show AT terminal once we're past initialization
+        // Show AT terminal once we're past initialization (including on errors — lets user debug manually)
         val terminalVisible = state !is Obd2ActivationState.Idle &&
             state !is Obd2ActivationState.ScanningForAdapter &&
             state !is Obd2ActivationState.AdapterList &&
             state !is Obd2ActivationState.Connecting &&
-            state !is Obd2ActivationState.InitializingAdapter &&
-            state !is Obd2ActivationState.ActivationError
+            state !is Obd2ActivationState.InitializingAdapter
         binding.terminalCard.visibility = if (terminalVisible) View.VISIBLE else View.GONE
 
         when (state) {
