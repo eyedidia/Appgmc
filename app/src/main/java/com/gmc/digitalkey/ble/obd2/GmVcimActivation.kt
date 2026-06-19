@@ -246,7 +246,36 @@ object GmVcimActivation {
                         writeDidPre.getOrNull(2)?.let { "NRC 0x%02X".format(it) } ?: writeDidPre.toHex())
             }
 
-            // 2b. RoutineControl (0x31) — some BLE activation paths are routines, not DID writes.
+            // 2b. InputOutputControl (0x2F) — force BLE output on without SecurityAccess.
+            //     On some GM Ultium VCIM firmware versions this service is open in ExtendedSession.
+            for ((ioArgs, label) in listOf(
+                byteArrayOf(0xF1.toByte(), 0xA0.toByte(), 0x03.toByte(), 0x01.toByte()) to "2F F1A0 shortTermAdj=0x01",
+                byteArrayOf(0xF1.toByte(), 0xA0.toByte(), 0x01.toByte()) to "2F F1A0 returnCtrl",
+                byteArrayOf(0xF1.toByte(), 0xD0.toByte(), 0x03.toByte(), 0x01.toByte()) to "2F F1D0 shortTermAdj=0x01",
+            )) {
+                try {
+                    val r = manager.sendUds(vcimAddress, byteArrayOf(0x2F.toByte(), *ioArgs))
+                    when {
+                        r.firstOrNull() == 0x6F.toByte() -> {
+                            stepLog += StepResult("InputOutputControl $label", true,
+                                "BLE enabled via IOCTL: ${r.toHex()}")
+                            return ActivationResult.Success(vcimAddress)
+                        }
+                        r.getOrNull(2) == 0x33.toByte() || r.getOrNull(2) == 0x22.toByte() ->
+                            stepLog += StepResult("InputOutputControl $label", false,
+                                "NRC 0x%02X — SA required".format(r.getOrNull(2)))
+                        else ->
+                            stepLog += StepResult("InputOutputControl $label", false,
+                                r.getOrNull(2)?.let { "NRC 0x%02X".format(it) }
+                                    ?: if (r.isEmpty()) "No response" else r.toHex())
+                    }
+                } catch (e: Exception) {
+                    stepLog += StepResult("InputOutputControl $label", false, "Timeout: ${e.message}")
+                }
+                delay(400)
+            }
+
+            // 2c. RoutineControl (0x31) — some BLE activation paths are routines, not DID writes.
             //     Try before SecurityAccess since routines may not require SA.
             for ((routineId, label) in listOf(
                 byteArrayOf(0xF1.toByte(), 0xA0.toByte()) to "F1A0 BLE-enable routine",
@@ -286,7 +315,7 @@ object GmVcimActivation {
                 delay(400)  // let ECU recover between failed routine attempts to avoid lockout
             }
 
-            // 2c. Programming session direct write — some ECUs allow activation DID write in
+            // 2d. Programming session direct write — some ECUs allow activation DID write in
             //     programming session (10 02) without SecurityAccess. Quick to try.
             run {
                 val progSess = try {
@@ -334,6 +363,14 @@ object GmVcimActivation {
                 "16B-XOR-nonce" to { seed: ByteArray ->
                     if (seed.size >= 32) seed.drop(16).take(16).map { (it.toInt() xor 0xA5 and 0xFF).toByte() }.toByteArray()
                     else seed.map { (it.toInt() xor 0xA5 and 0xFF).toByte() }.toByteArray()
+                },
+                // Null/pattern probes — AES with all-zeros key is a known test pattern
+                // in some Tier-1 supplier implementations (Delphi/Aptiv/Continental debug mode).
+                "16B-ZEROS"    to { seed: ByteArray -> ByteArray(if (seed.size >= 32) 32 else 16) },
+                "16B-FF"       to { seed: ByteArray -> ByteArray(if (seed.size >= 32) 32 else 16) { 0xFF.toByte() } },
+                "16B-AA55"     to { seed: ByteArray ->
+                    val n = if (seed.size >= 32) 32 else 16
+                    ByteArray(n) { if (it % 2 == 0) 0xAA.toByte() else 0x55.toByte() }
                 },
             )
 
@@ -531,6 +568,69 @@ object GmVcimActivation {
                                 "NRC 0x35 — wrong key value — tried: ${key.toHex()}")
                         else ->
                             stepLog += StepResult("SecurityAccess L3 key $algName (${key.size}B)", false,
+                                "${nrc?.let { "NRC 0x%02X".format(it) } ?: keyResp.toHex()} — tried: ${key.toHex()}")
+                    }
+                    if (unlocked) break
+                }
+            }
+
+            // SecurityAccess Level 4 (0x07/0x08) — GM Telematics / connected-services access.
+            // Present on K73 VCIM Ultium modules; often uses a simpler 4-byte LFSR or XOR.
+            if (!unlocked) {
+                val keyAlgorithmsL4 = listOf(
+                    "LFSR"       to { seed: ByteArray -> gmLfsrKey(seed.take(4).toByteArray().toLong32()).toBytes4() },
+                    "XOR-A5"     to { seed: ByteArray -> seed.take(4).map { (it.toInt() xor 0xA5 and 0xFF).toByte() }.toByteArray() },
+                    "4B-NOT"     to { seed: ByteArray -> seed.take(4).map { (it.toInt().inv() and 0xFF).toByte() }.toByteArray() },
+                    "4B-ZEROS"   to { _: ByteArray -> ByteArray(4) },
+                )
+                for ((algName, algFn) in keyAlgorithmsL4) {
+                    if (!reopenSession(manager, vcimAddress, "L4-$algName", stepLog)) continue
+                    val seedR = try {
+                        manager.sendUds(vcimAddress, byteArrayOf(SVC_SECURITY_ACCESS, 0x07.toByte()))
+                    } catch (e: Exception) {
+                        stepLog += StepResult("SecurityAccess L4 seed ($algName)", false, "Timeout: ${e.message}")
+                        continue
+                    }
+                    if (seedR.firstOrNull() != 0x67.toByte() || seedR.size < 3) {
+                        val nrcByte = seedR.getOrNull(2)
+                        if (nrcByte == 0x12.toByte() || nrcByte == 0x31.toByte()) {
+                            stepLog += StepResult("SecurityAccess L4 seed", false,
+                                "NRC 0x%02X — Level 4 not supported".format(nrcByte))
+                            break
+                        }
+                        stepLog += StepResult("SecurityAccess L4 seed ($algName)", false,
+                            if (seedR.isEmpty()) "No response" else seedR.toHex())
+                        continue
+                    }
+                    val freshSeed = seedR.drop(2).toByteArray()
+                    if (lastFullSeed.isEmpty()) lastFullSeed = freshSeed
+                    if (algName == "LFSR") {
+                        stepLog += StepResult("SecurityAccess L4 (0x07) seed", true,
+                            "Seed (${freshSeed.size}B): ${freshSeed.toHex()}")
+                    }
+                    val key = algFn(freshSeed)
+                    val keyResp = manager.sendUds(vcimAddress,
+                        byteArrayOf(SVC_SECURITY_ACCESS, 0x08.toByte(), *key))
+                    val nrc = keyResp.getOrNull(2)
+                    when {
+                        keyResp.firstOrNull() == 0x67.toByte() -> {
+                            stepLog += StepResult("SecurityAccess L4 unlock ($algName, ${key.size}B)", true,
+                                "Unlocked! Key: ${key.toHex()}")
+                            unlocked = true
+                        }
+                        nrc == 0x36.toByte() -> {
+                            stepLog += StepResult("SecurityAccess L4 unlock", false, "LOCKED OUT (0x36)")
+                            return ActivationResult.CommunicationError(
+                                "SecurityAccess locked out — wait 10 minutes then retry.")
+                        }
+                        nrc == 0x35.toByte() ->
+                            stepLog += StepResult("SecurityAccess L4 key $algName (${key.size}B)", false,
+                                "NRC 0x35 — wrong key — tried: ${key.toHex()}")
+                        nrc == 0x13.toByte() ->
+                            stepLog += StepResult("SecurityAccess L4 key $algName (${key.size}B)", false,
+                                "NRC 0x13 — wrong key length — tried: ${key.toHex()}")
+                        else ->
+                            stepLog += StepResult("SecurityAccess L4 key $algName (${key.size}B)", false,
                                 "${nrc?.let { "NRC 0x%02X".format(it) } ?: keyResp.toHex()} — tried: ${key.toHex()}")
                     }
                     if (unlocked) break
