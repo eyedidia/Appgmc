@@ -468,9 +468,12 @@ class Obd2Manager(private val context: Context) {
                     BluetoothGattCharacteristic.WRITE_TYPE_NO_RESPONSE
                 txChar.value = (cmd + "\r").toByteArray(Charsets.US_ASCII)
                 val writeOk = g.writeCharacteristic(txChar)
+                synchronized(_commandLog) {
+                    _commandLog.add("BLE tx" to "writeCharacteristic returned=${writeOk} type=${txChar.writeType} bytes=${txChar.value?.size}")
+                }
                 if (!writeOk) {
                     pendingResponse = null
-                    error("BLE write failed (writeCharacteristic returned false) — check GATT layout")
+                    error("BLE write failed (writeCharacteristic returned false) — GATT busy or disconnected")
                 }
                 response = awaitResponseWithOptionalPoll(g, deferred, timeoutMs)
             }
@@ -815,12 +818,22 @@ class Obd2Manager(private val context: Context) {
                     }
                 }
             }
-            gatt.setCharacteristicNotification(rxChar, true)
+            val notifyOk = gatt.setCharacteristicNotification(rxChar, true)
+            synchronized(_commandLog) {
+                _commandLog.add("BLE setup" to "setCharacteristicNotification=${notifyOk} on ${rxChar.uuid.toString().uppercase().take(8)}")
+            }
             val desc = rxChar.getDescriptor(Elm327GattProfile.DESC_CCCD)
             if (desc != null) {
-                desc.value = BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE
-                gatt.writeDescriptor(desc)
+                // Write NOTIFY+INDICATE (0x03) — some adapters advertise NOTIFY but behave as INDICATE
+                desc.value = byteArrayOf(0x03.toByte(), 0x00.toByte())
+                val writeOk = gatt.writeDescriptor(desc)
+                synchronized(_commandLog) {
+                    _commandLog.add("BLE setup" to "CCCD write queued=${writeOk}")
+                }
             } else {
+                synchronized(_commandLog) {
+                    _commandLog.add("BLE setup" to "No CCCD descriptor — proceeding without NOTIFY enable")
+                }
                 _state.value = Obd2State.AdapterFound(gatt.device)
             }
         }
@@ -840,8 +853,20 @@ class Obd2Manager(private val context: Context) {
             }
         }
 
+        override fun onCharacteristicWrite(gatt: BluetoothGatt, char: BluetoothGattCharacteristic, status: Int) {
+            synchronized(_commandLog) {
+                _commandLog.add("BLE write ack" to
+                    "${char.uuid.toString().uppercase().take(8)} status=${if (status == BluetoothGatt.GATT_SUCCESS) "OK" else "FAIL($status)"}")
+            }
+        }
+
         override fun onCharacteristicChanged(gatt: BluetoothGatt, char: BluetoothGattCharacteristic) {
-            val chunk = char.value?.toString(Charsets.US_ASCII) ?: return
+            val raw = char.value ?: return
+            val chunk = raw.toString(Charsets.US_ASCII)
+            synchronized(_commandLog) {
+                _commandLog.add("BLE notify" to
+                    "${char.uuid.toString().uppercase().take(8)} bytes=${raw.size} data=${chunk.take(40).replace("\r","\\r").replace("\n","\\n")}")
+            }
             rxBuffer.append(chunk)
             if (rxBuffer.contains('>')) {
                 val response = rxBuffer.toString().substringBefore('>').trim()
@@ -852,6 +877,10 @@ class Obd2Manager(private val context: Context) {
         }
 
         override fun onDescriptorWrite(gatt: BluetoothGatt, descriptor: BluetoothGattDescriptor, status: Int) {
+            synchronized(_commandLog) {
+                _commandLog.add("BLE setup" to
+                    "CCCD write result=${if (status == BluetoothGatt.GATT_SUCCESS) "OK" else "FAIL($status)"}")
+            }
             _state.value = Obd2State.AdapterFound(gatt.device)
         }
     }
