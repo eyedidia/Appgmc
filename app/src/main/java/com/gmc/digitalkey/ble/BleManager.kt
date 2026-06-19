@@ -66,7 +66,7 @@ class BleManager(private val context: Context) {
     private var currentVehicleId: String? = null
     private var isPairingMode = false      // true = send PAIRING_REQUEST + pubkey, not challenge-response
     private var isDumpMode = false         // true = only dump GATT services, don't auth
-    private var isProbeMode = false        // true = subscribe to 4CDABAA2 and log raw bytes
+    private var isProbeMode = false        // true = subscribe to NOTIFY and log raw bytes
     private var pairingPubKeyBytes: ByteArray? = null  // stored between sendPairingRequest and onMtuChanged
     private val probeLogs = mutableListOf<String>()
     private var reconnectAttempts = 0
@@ -74,6 +74,8 @@ class BleManager(private val context: Context) {
     private var scanner: BluetoothLeScanner? = null
     private var scanAllCallback: ScanCallback? = null
     private var rawScanCallback: ScanCallback? = null
+    // Queue for reading characteristics one-by-one during GATT dump
+    private val dumpReadQueue = ArrayDeque<BluetoothGattCharacteristic>()
 
     val isBluetoothOn get() = adapter?.isEnabled == true
 
@@ -383,6 +385,13 @@ class BleManager(private val context: Context) {
         }
 
         override fun onCharacteristicRead(gatt: BluetoothGatt, char: BluetoothGattCharacteristic, status: Int) {
+            // GATT dump: drain read queue then emit
+            if (isDumpMode) {
+                val next = dumpReadQueue.removeFirstOrNull()
+                if (next != null) gatt.readCharacteristic(next)
+                else emitGattDump(gatt)
+                return
+            }
             if (char.uuid == VehicleGattProfile.CHAR_CHALLENGE && status == BluetoothGatt.GATT_SUCCESS) {
                 if (isPairingMode) {
                     // During pairing, challenge = vehicle's response to our pairing request
@@ -563,25 +572,35 @@ class BleManager(private val context: Context) {
     // ─── Direct BLE probe ─────────────────────────────────────────────────────
 
     private fun performVehicleProbe(gatt: BluetoothGatt) {
-        val service = gatt.getService(VehicleGattProfile.SERVICE_DIRECT_DK) ?: run {
-            // Service not found after connect — fall back to GATT dump for research
-            Log.i(TAG, "4CDABAA0 not found — falling back to GATT dump")
-            performGattDump(gatt)
-            return
+        // Support both 4CDABAA0 (Ultium secondary module) and FD06 (GR-AC series)
+        val directSvc = gatt.getService(VehicleGattProfile.SERVICE_DIRECT_DK)
+        val fd06Svc   = gatt.getService(VehicleGattProfile.SERVICE_FD06)
+
+        val rxChar: BluetoothGattCharacteristic
+        val svcLabel: String
+        when {
+            directSvc != null -> {
+                rxChar   = directSvc.getCharacteristic(VehicleGattProfile.CHAR_DIRECT_DK_RX)
+                              ?: run { performGattDump(gatt); return }
+                svcLabel = "4CDABAA0"
+            }
+            fd06Svc != null -> {
+                rxChar   = fd06Svc.getCharacteristic(VehicleGattProfile.CHAR_FD04_NOTIFY)
+                              ?: run { performGattDump(gatt); return }
+                svcLabel = "FD06"
+            }
+            else -> { Log.i(TAG, "No probe service — GATT dump"); performGattDump(gatt); return }
         }
-        val rxChar = service.getCharacteristic(VehicleGattProfile.CHAR_DIRECT_DK_RX) ?: run {
-            performGattDump(gatt); return
-        }
+
         gatt.setCharacteristicNotification(rxChar, true)
         rxChar.getDescriptor(VehicleGattProfile.DESC_CCCD)?.let { desc ->
             desc.value = BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE
             gatt.writeDescriptor(desc)
         }
-        val header = "Connected to ${gatt.device.address}  service=4CDABAA0\nListening for notifications on 4CDABAA2…"
+        val header = "Connected to ${gatt.device.address}  service=$svcLabel\nListening for NOTIFY…"
         synchronized(probeLogs) { probeLogs.add(header) }
         _connectionState.value = BleConnectionState.VehicleBleLog(gatt.device, probeLogs.toList())
-        Log.i(TAG, "Vehicle BLE probe: subscribed to 4CDABAA2 NOTIFY")
-        // Auto-disconnect after 120 s if nothing sent it earlier
+        Log.i(TAG, "Vehicle BLE probe: subscribed to NOTIFY  service=$svcLabel")
         handler.postDelayed({
             if (isProbeMode) { gatt.disconnect(); isProbeMode = false }
         }, 120_000)
@@ -590,6 +609,20 @@ class BleManager(private val context: Context) {
     // ─── GATT dump ────────────────────────────────────────────────────────────
 
     private fun performGattDump(gatt: BluetoothGatt) {
+        // Queue all readable characteristics — values read sequentially via onCharacteristicRead
+        dumpReadQueue.clear()
+        for (svc in gatt.services) {
+            for (char in svc.characteristics) {
+                if (char.properties and BluetoothGattCharacteristic.PROPERTY_READ != 0) {
+                    dumpReadQueue.addLast(char)
+                }
+            }
+        }
+        if (dumpReadQueue.isEmpty()) { emitGattDump(gatt); return }
+        gatt.readCharacteristic(dumpReadQueue.removeFirst())
+    }
+
+    private fun emitGattDump(gatt: BluetoothGatt) {
         val services = gatt.services.map { svc ->
             val chars = svc.characteristics.map { char ->
                 val props = buildList {
@@ -599,23 +632,21 @@ class BleManager(private val context: Context) {
                     if (char.properties and BluetoothGattCharacteristic.PROPERTY_INDICATE != 0) add("INDICATE")
                     if (char.properties and BluetoothGattCharacteristic.PROPERTY_WRITE_NO_RESPONSE != 0) add("WRITE_NR")
                 }
-                val value = char.value?.let { v -> v.joinToString(" ") { "%02X".format(it) } } ?: ""
+                val raw = char.value
+                val value = when {
+                    raw == null || raw.isEmpty() -> ""
+                    raw.all { it in 32..126 }    -> "\"${String(raw)}\"  [${raw.joinToString(" ") { "%02X".format(it) }}]"
+                    else                          -> raw.joinToString(" ") { "%02X".format(it) }
+                }
                 BleConnectionState.CharInfo(
                     uuid = char.uuid.toString().uppercase(),
                     properties = props.joinToString("|"),
                     value = value
                 )
             }
-            BleConnectionState.ServiceInfo(
-                uuid = svc.uuid.toString().uppercase(),
-                characteristics = chars
-            )
+            BleConnectionState.ServiceInfo(uuid = svc.uuid.toString().uppercase(), characteristics = chars)
         }
-        Log.i(TAG, "GATT dump: ${services.size} services found")
-        services.forEach { svc ->
-            Log.i(TAG, "  Service: ${svc.uuid}")
-            svc.characteristics.forEach { c -> Log.i(TAG, "    Char: ${c.uuid} [${c.properties}]") }
-        }
+        Log.i(TAG, "GATT dump: ${services.size} services")
         _connectionState.value = BleConnectionState.GattDump(gatt.device, services)
         handler.postDelayed({ gatt.disconnect() }, 2000)
         isDumpMode = false
