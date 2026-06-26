@@ -316,7 +316,11 @@ class BleManager(private val context: Context) {
         val bytes = hexString.replace(" ", "").chunked(2)
             .mapNotNull { it.toIntOrNull(16)?.toByte() }.toByteArray()
         txChar.value = bytes
-        txChar.writeType = BluetoothGattCharacteristic.WRITE_TYPE_NO_RESPONSE
+        // Use the write type the characteristic actually supports
+        txChar.writeType = if (txChar.properties and BluetoothGattCharacteristic.PROPERTY_WRITE_NO_RESPONSE != 0)
+            BluetoothGattCharacteristic.WRITE_TYPE_NO_RESPONSE
+        else
+            BluetoothGattCharacteristic.WRITE_TYPE_DEFAULT
         g.writeCharacteristic(txChar)
         val entry = "TX → ${bytes.joinToString(" ") { "%02X".format(it) }}"
         synchronized(probeLogs) { probeLogs.add(entry) }
