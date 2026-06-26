@@ -195,6 +195,21 @@ class Obd2ActivationViewModel(app: Application) : AndroidViewModel(app) {
             obd2Manager.adapterIdentity.isNotBlank() && obd2Manager.adapterIdentity != "?",
             obd2Manager.adapterIdentity.ifBlank { "No ATI response" }
         )
+        emitStepLog()
+
+        // Proprietary adapters (OBD Coding Pro Basic) cannot run UDS activation —
+        // they use a closed protocol that doesn't pass through raw CAN/UDS frames.
+        if (obd2Manager.isProprietaryAdapter) {
+            _uiState.value = Obd2ActivationState.ActivationError(
+                "This adapter (${obd2Manager.adapterIdentity}) uses a proprietary protocol " +
+                "and cannot send UDS/CAN commands to the vehicle.\n\n" +
+                "Use the AT terminal below to explore its native commands, " +
+                "or connect a standard ELM327 OBD adapter.",
+                recoverable = true
+            )
+            return
+        }
+
         activeStepLog += GmVcimActivation.StepResult(
             "Protocol detection",
             true,

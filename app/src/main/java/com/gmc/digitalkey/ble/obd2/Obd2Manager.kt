@@ -60,6 +60,11 @@ class Obd2Manager(private val context: Context) {
     var use29BitCan = false
         private set
 
+    // True when the connected adapter uses a proprietary protocol (not ELM327 AT commands).
+    // In this mode AT commands will always fail; use the AT terminal to probe native protocol.
+    var isProprietaryAdapter = false
+        private set
+
     // Adapter self-identification string from ATI response (e.g. "ELM327 v1.5", "OBDII v2.1")
     var adapterIdentity: String = ""
         private set
@@ -467,7 +472,13 @@ class Obd2Manager(private val context: Context) {
                 else
                     BluetoothGattCharacteristic.WRITE_TYPE_NO_RESPONSE
                 txChar.value = (cmd + "\r").toByteArray(Charsets.US_ASCII)
-                val writeOk = g.writeCharacteristic(txChar)
+                // GATT only allows one in-flight write at a time. Retry with backoff when busy.
+                var writeOk = false
+                for (attempt in 1..3) {
+                    writeOk = g.writeCharacteristic(txChar)
+                    if (writeOk) break
+                    delay(80L * attempt)  // 80ms, 160ms, 240ms
+                }
                 synchronized(_commandLog) {
                     _commandLog.add("BLE tx" to "writeCharacteristic returned=${writeOk} type=${txChar.writeType} bytes=${txChar.value?.size}")
                 }
@@ -519,6 +530,7 @@ class Obd2Manager(private val context: Context) {
         }
         use29BitCan = false
         adapterIdentity = ""
+        isProprietaryAdapter = false
         return try {
             // Let BLE NOTIFY settle after CCCD write — professional coding adapters need this.
             delay(1_500)
@@ -531,14 +543,15 @@ class Obd2Manager(private val context: Context) {
             // Examples: "24,00," (ping-ok) or "25,15,Error no such command"
             val isProprietaryProtocol = probeResp.matches(Regex("\\d{2,},\\w+,.*"))
             if (isProprietaryProtocol) {
+                isProprietaryAdapter = true
+                adapterIdentity = "OBD Coding Pro (proprietary)"
                 synchronized(_commandLog) {
                     _commandLog.add("Protocol" to
                         "OBD Coding Pro proprietary detected (not ELM327). Probe: \"$probeResp\"")
                     _commandLog.add("Info" to
                         "Use AT terminal to explore commands. Known format: {CODE},{LEN_HEX},{DATA};")
                 }
-                adapterIdentity = "OBD Coding Pro (proprietary)"
-                _state.value = Obd2State.Ready   // allow AT terminal to function
+                _state.value = Obd2State.Ready   // allow AT terminal to function for manual probing
                 return true
             }
 
