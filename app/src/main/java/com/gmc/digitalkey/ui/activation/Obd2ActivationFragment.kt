@@ -236,7 +236,11 @@ class Obd2ActivationFragment : Fragment() {
     private fun renderAdapterList(adapters: List<BluetoothDevice>) {
         binding.adaptersContainer.removeAllViews()
         adapters.forEach { device ->
-            val name = runCatching { device.name }.getOrNull() ?: device.address
+            // Prefer name from scan record cache — more reliable than device.name for BLE devices
+            // that advertise only service UUIDs without a Complete Local Name in the advertisement.
+            val name = viewModel.obd2Manager.getScannedName(device.address)
+                ?: runCatching { device.name }.getOrNull()
+                ?: device.address
             val isClassic = device.type == android.bluetooth.BluetoothDevice.DEVICE_TYPE_CLASSIC ||
                 device.type == android.bluetooth.BluetoothDevice.DEVICE_TYPE_DUAL
 

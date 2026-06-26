@@ -102,6 +102,11 @@ class Obd2Manager(private val context: Context) {
     // (not NOTIFY) inside the FFE0 service. After writing to FFE1 we poll it for responses.
     private var pollReadChar: BluetoothGattCharacteristic? = null
 
+    // Names captured from BLE scan records (advertising packet) — more reliable than device.name
+    // which returns null for devices that advertise only service UUIDs, not a Complete Local Name.
+    private val scanNameCache = mutableMapOf<String, String>()
+    fun getScannedName(address: String): String? = scanNameCache[address]
+
     // -- Scanning
 
     fun scanForAdapter(onFound: (BluetoothDevice) -> Unit, onStopped: () -> Unit = {}) {
@@ -190,6 +195,7 @@ class Obd2Manager(private val context: Context) {
 
         val filteredCb = object : ScanCallback() {
             override fun onScanResult(callbackType: Int, result: ScanResult) {
+                cacheNameFromScanResult(result)
                 if (found.add(result.device.address)) onFound(result.device)
             }
             override fun onScanFailed(errorCode: Int) { /* will be caught by unfiltered below */ }
@@ -199,7 +205,8 @@ class Obd2Manager(private val context: Context) {
         // in their advertisement — filter by name hint instead.
         val nameCb = object : ScanCallback() {
             override fun onScanResult(callbackType: Int, result: ScanResult) {
-                val name = runCatching { result.device.name }.getOrNull() ?: return
+                cacheNameFromScanResult(result)
+                val name = scanNameCache[result.device.address] ?: return
                 if (Elm327GattProfile.ELM_NAME_HINTS.any { name.contains(it, ignoreCase = true) }) {
                     if (found.add(result.device.address)) onFound(result.device)
                 }
@@ -229,6 +236,7 @@ class Obd2Manager(private val context: Context) {
         val found = mutableSetOf<String>()
         val cb = object : ScanCallback() {
             override fun onScanResult(callbackType: Int, result: ScanResult) {
+                cacheNameFromScanResult(result)
                 if (found.add(result.device.address)) onFound(result.device)
             }
             override fun onScanFailed(errorCode: Int) {
@@ -243,6 +251,12 @@ class Obd2Manager(private val context: Context) {
             if (_state.value is Obd2State.Scanning) _state.value = Obd2State.Idle
             onStopped()
         }, 10_000)
+    }
+
+    private fun cacheNameFromScanResult(result: ScanResult) {
+        val name = result.scanRecord?.deviceName
+            ?: runCatching { result.device.name }.getOrNull()
+        if (!name.isNullOrBlank()) scanNameCache[result.device.address] = name
     }
 
     fun getClassicBtDevices(): List<BluetoothDevice> =
