@@ -399,9 +399,12 @@ class BleManager(private val context: Context) {
                 else emitGattDump(gatt)
                 return
             }
-            if (char.uuid == VehicleGattProfile.CHAR_CHALLENGE && status == BluetoothGatt.GATT_SUCCESS) {
+            val challengeUuids = setOf(
+                VehicleGattProfile.CHAR_CHALLENGE,  // 5E2A68A5
+                VehicleGattProfile.CHAR_VCIM_NOTIFY // 0x2B10 (used as READ on some firmware)
+            )
+            if (char.uuid in challengeUuids && status == BluetoothGatt.GATT_SUCCESS) {
                 if (isPairingMode) {
-                    // During pairing, challenge = vehicle's response to our pairing request
                     val hex = char.value?.joinToString(" ") { "%02X".format(it) } ?: "empty"
                     Log.i(TAG, "Pairing response from vehicle: $hex")
                     val ok = char.value?.firstOrNull() == 0x00.toByte() ||
@@ -413,7 +416,7 @@ class BleManager(private val context: Context) {
                         _connectionState.value = BleConnectionState.PairingFailed(gatt.device, hex)
                     }
                     gatt.disconnect()
-                } else if (status == BluetoothGatt.GATT_SUCCESS) {
+                } else {
                     handleChallenge(gatt, char.value)
                 }
             }
@@ -436,8 +439,6 @@ class BleManager(private val context: Context) {
                     val hex = bytes.joinToString(" ") { "%02X".format(it) }
                     Log.i(TAG, "← 5E2A68A5 NOTIFY (${bytes.size}B): $hex")
                     if (isPairingMode) {
-                        // Vehicle responded to our PAIRING_REQUEST.
-                        // Protocol assumption: 0x00 or 0x21 in first byte = accepted.
                         val first = bytes.firstOrNull()
                         val ok = first == 0x00.toByte() || first == 0x21.toByte()
                         isPairingMode = false
@@ -452,15 +453,24 @@ class BleManager(private val context: Context) {
                         handleChallenge(gatt, bytes)
                     }
                 }
+                VehicleGattProfile.CHAR_VCIM_NOTIFY -> {
+                    val bytes = char.value ?: return
+                    val hex = bytes.joinToString(" ") { "%02X".format(it) }
+                    Log.i(TAG, "← 0x2B10 NOTIFY (${bytes.size}B): $hex")
+                    handleChallenge(gatt, bytes)
+                }
             }
         }
 
         override fun onCharacteristicWrite(gatt: BluetoothGatt, char: BluetoothGattCharacteristic, status: Int) {
             if (isPairingMode && char.uuid == VehicleGattProfile.CHAR_COMMAND) {
-                Log.i(TAG, "→ PAIRING_REQUEST written (status=$status), waiting for vehicle NOTIFY on 5E2A68A5…")
-                // Vehicle sends its response via NOTIFY on CHAR_SERVER_WRITE — handled in onCharacteristicChanged
-            } else if (char.uuid == VehicleGattProfile.CHAR_RESPONSE && status == BluetoothGatt.GATT_SUCCESS) {
+                Log.i(TAG, "→ PAIRING_REQUEST written (status=$status), waiting for vehicle NOTIFY…")
+            } else if ((char.uuid == VehicleGattProfile.CHAR_RESPONSE ||
+                        char.uuid == VehicleGattProfile.CHAR_VCIM_WRITE) &&
+                       status == BluetoothGatt.GATT_SUCCESS) {
                 _connectionState.value = BleConnectionState.Ready(gatt.device)
+            } else if (status != BluetoothGatt.GATT_SUCCESS) {
+                Log.w(TAG, "Write failed on ${char.uuid}: status=$status")
             }
         }
 
@@ -519,7 +529,13 @@ class BleManager(private val context: Context) {
             return
         }
         val service = gatt.getService(VehicleGattProfile.SERVICE_UUID) ?: run {
-            performGattDump(gatt); return
+            // Vehicle is in normal mode (0x1910), not pairing mode (48B42B00).
+            // Switch to auth flow instead of aborting.
+            Log.w(TAG, "Pairing mode: 48B42B00 not found — vehicle not in pairing mode. Trying auth flow.")
+            isPairingMode = false
+            pairingPubKeyBytes = null
+            enableNotifications(gatt)
+            return
         }
 
         // Step 1: subscribe to NOTIFY on 5E2A68A5 so we receive the vehicle's pairing response.
@@ -542,18 +558,32 @@ class BleManager(private val context: Context) {
     // ─── Auth helpers ─────────────────────────────────────────────────────────
 
     private fun enableNotifications(gatt: BluetoothGatt) {
-        val service = gatt.getService(VehicleGattProfile.SERVICE_UUID) ?: return
-        // Single vehicle→phone channel 5E2A68A5 carries all events (challenge, status, charging)
-        listOf(VehicleGattProfile.CHAR_SERVER_WRITE)
-            .mapNotNull { service.getCharacteristic(it) }
-            .forEach { char ->
-                gatt.setCharacteristicNotification(char, true)
-                val desc = char.getDescriptor(VehicleGattProfile.DESC_CCCD)
-                desc?.let {
-                    it.value = BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE
-                    gatt.writeDescriptor(it)
-                }
-            }
+        // Support both 48B42B00 (pairing-mode service) and 0x1910 (normal-mode VCIM service)
+        val mainSvc  = gatt.getService(VehicleGattProfile.SERVICE_UUID)
+        val vcim1910 = gatt.getService(VehicleGattProfile.SERVICE_VCIM_1910)
+
+        val notifyChar: BluetoothGattCharacteristic? = when {
+            mainSvc != null  -> mainSvc.getCharacteristic(VehicleGattProfile.CHAR_SERVER_WRITE)
+            vcim1910 != null -> vcim1910.getCharacteristic(VehicleGattProfile.CHAR_VCIM_NOTIFY)
+            else             -> null
+        }
+
+        if (notifyChar == null) {
+            Log.w(TAG, "enableNotifications: neither 48B42B00 nor 0x1910 service found → GATT dump")
+            _connectionState.value = BleConnectionState.Error(
+                "Vehicle service not found. Put the vehicle in pairing mode or try again.",
+                recoverable = true
+            )
+            gatt.disconnect()
+            return
+        }
+
+        gatt.setCharacteristicNotification(notifyChar, true)
+        notifyChar.getDescriptor(VehicleGattProfile.DESC_CCCD)?.let { desc ->
+            desc.value = BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE
+            gatt.writeDescriptor(desc)
+        }
+        Log.i(TAG, "enableNotifications: subscribed to NOTIFY on ${notifyChar.uuid}")
     }
 
     private fun readChallenge(gatt: BluetoothGatt) {
@@ -569,8 +599,16 @@ class BleManager(private val context: Context) {
         val signature = runCatching { ChallengeResponseEngine.signChallenge(vehicleId, challenge) }
             .getOrElse { e -> Log.e(TAG, "Sign failed: $e"); return }
         Log.i(TAG, "→ Response (${signature.size}B): ${signature.take(8).joinToString(" ") { "%02X".format(it) }}…")
-        val service = gatt.getService(VehicleGattProfile.SERVICE_UUID) ?: return
-        val char = service.getCharacteristic(VehicleGattProfile.CHAR_RESPONSE) ?: return
+
+        // 48B42B00 service → write to CHAR_RESPONSE; 0x1910 service → write to CHAR_VCIM_WRITE
+        val mainSvc = gatt.getService(VehicleGattProfile.SERVICE_UUID)
+        val vcim1910 = gatt.getService(VehicleGattProfile.SERVICE_VCIM_1910)
+        val (service, charUuid) = when {
+            mainSvc  != null -> mainSvc  to VehicleGattProfile.CHAR_RESPONSE
+            vcim1910 != null -> vcim1910 to VehicleGattProfile.CHAR_VCIM_WRITE
+            else             -> return
+        }
+        val char = service.getCharacteristic(charUuid) ?: return
         char.value = signature
         char.writeType = BluetoothGattCharacteristic.WRITE_TYPE_DEFAULT
         gatt.writeCharacteristic(char)
