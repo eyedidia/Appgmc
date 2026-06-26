@@ -7,12 +7,18 @@ import android.content.Context
 import android.os.Handler
 import android.os.Looper
 import android.util.Log
+import com.gmc.digitalkey.ble.companion.CdpSession
 import com.gmc.digitalkey.crypto.ChallengeResponseEngine
 import com.gmc.digitalkey.crypto.KeyCredentialStore
+import com.gmc.digitalkey.db.AppDatabase
+import com.gmc.digitalkey.db.AssociatedCarEntity
 import com.gmc.digitalkey.model.ChargingState
 import com.gmc.digitalkey.model.LockState
 import com.gmc.digitalkey.model.PlugState
 import com.gmc.digitalkey.model.VehicleState
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -55,6 +61,8 @@ class BleManager(private val context: Context) {
 
     private val bluetoothManager = context.getSystemService(Context.BLUETOOTH_SERVICE) as BluetoothManager
     private val adapter get() = bluetoothManager.adapter
+    private val db by lazy { AppDatabase.get(context) }
+    private val ioScope = CoroutineScope(Dispatchers.IO)
 
     private val _connectionState = MutableStateFlow<BleConnectionState>(BleConnectionState.Idle)
     val connectionState: StateFlow<BleConnectionState> = _connectionState.asStateFlow()
@@ -67,6 +75,7 @@ class BleManager(private val context: Context) {
     private var isPairingMode = false      // true = send PAIRING_REQUEST + pubkey, not challenge-response
     private var isDumpMode = false         // true = only dump GATT services, don't auth
     private var isProbeMode = false        // true = subscribe to NOTIFY and log raw bytes
+    private var isCdpMode = false          // true = use CDP/UKEY2 protocol (myGMC-compatible)
     private var pairingPubKeyBytes: ByteArray? = null  // stored between sendPairingRequest and onMtuChanged
     private val probeLogs = mutableListOf<String>()
     private var reconnectAttempts = 0
@@ -76,6 +85,9 @@ class BleManager(private val context: Context) {
     private var rawScanCallback: ScanCallback? = null
     // Queue for reading characteristics one-by-one during GATT dump
     private val dumpReadQueue = ArrayDeque<BluetoothGattCharacteristic>()
+
+    // CDP session (non-null while a CDP connection is active)
+    private var cdpSession: CdpSession? = null
 
     val isBluetoothOn get() = adapter?.isEnabled == true
 
@@ -245,6 +257,20 @@ class BleManager(private val context: Context) {
         gatt = device.connectGatt(context, false, gattCallback, BluetoothDevice.TRANSPORT_LE)
     }
 
+    // ─── CDP connect (UKEY2 + AES-GCM, myGMC-compatible protocol) ───────────
+    // Use this for normal unlock/lock on vehicles that use the Google Companion Device Platform.
+
+    fun connectCdp(device: BluetoothDevice, vehicleId: String) {
+        isCdpMode = true
+        isPairingMode = false
+        isDumpMode = false
+        isProbeMode = false
+        currentVehicleId = vehicleId
+        _connectionState.value = BleConnectionState.Connecting(device)
+        gatt?.close()
+        gatt = device.connectGatt(context, false, gattCallback, BluetoothDevice.TRANSPORT_LE)
+    }
+
     // ─── GATT dump (enumerates all services/characteristics — for research) ───
 
     fun dumpGatt(device: BluetoothDevice) {
@@ -296,8 +322,30 @@ class BleManager(private val context: Context) {
 
     // ─── Commands ─────────────────────────────────────────────────────────────
 
-    fun sendLock()   = sendCommand(VehicleGattProfile.Commands.LOCK, "LOCK")
-    fun sendUnlock() = sendCommand(VehicleGattProfile.Commands.UNLOCK, "UNLOCK")
+    fun sendLock()   = if (isCdpMode) sendCdpLock() else sendCommand(VehicleGattProfile.Commands.LOCK, "LOCK")
+    fun sendUnlock() = if (isCdpMode) sendCdpUnlock() else sendCommand(VehicleGattProfile.Commands.UNLOCK, "UNLOCK")
+
+    private fun sendCdpLock() {
+        val session = cdpSession ?: return
+        val vehicleId = currentVehicleId ?: return
+        ioScope.launch {
+            val car = db.associatedCarDao().findById(vehicleId) ?: run {
+                Log.w(TAG, "CDP lock: no association for $vehicleId"); return@launch
+            }
+            session.sendLock(car.tokenHandle, car.escrowToken)
+        }
+    }
+
+    private fun sendCdpUnlock() {
+        val session = cdpSession ?: return
+        val vehicleId = currentVehicleId ?: return
+        ioScope.launch {
+            val car = db.associatedCarDao().findById(vehicleId) ?: run {
+                Log.w(TAG, "CDP unlock: no association for $vehicleId"); return@launch
+            }
+            session.sendUnlock(car.tokenHandle, car.escrowToken)
+        }
+    }
 
     fun sendChargeLimit(limitPercent: Int) {
         val gatt = gatt ?: return
@@ -328,7 +376,10 @@ class BleManager(private val context: Context) {
         isPairingMode = false
         isDumpMode = false
         isProbeMode = false
+        isCdpMode = false
         pairingPubKeyBytes = null
+        cdpSession?.reset()
+        cdpSession = null
         synchronized(probeLogs) { probeLogs.clear() }
         gatt?.disconnect()
         gatt?.close()
@@ -353,6 +404,9 @@ class BleManager(private val context: Context) {
                         _connectionState.value = BleConnectionState.Idle
                         isPairingMode = false; isDumpMode = false; isProbeMode = false
                         return
+                    }
+                    if (isCdpMode) {
+                        cdpSession?.reset(); cdpSession = null
                     }
                     if (reconnectAttempts < 10) {
                         reconnectAttempts++
@@ -381,6 +435,10 @@ class BleManager(private val context: Context) {
 
             if (isProbeMode) {
                 performVehicleProbe(gatt); return
+            }
+
+            if (isCdpMode) {
+                startCdpSession(gatt); return
             }
 
             if (isPairingMode) {
@@ -433,6 +491,13 @@ class BleManager(private val context: Context) {
                 _connectionState.value = BleConnectionState.VehicleBleLog(gatt.device, probeLogs.toList())
                 return
             }
+            // Route to CDP session if active
+            if (isCdpMode) {
+                val bytes = char.value ?: return
+                Log.d(TAG, "← CDP NOTIFY ${char.uuid.toString().uppercase().take(8)} (${bytes.size}B)")
+                cdpSession?.onBytesReceived(bytes)
+                return
+            }
             when (char.uuid) {
                 VehicleGattProfile.CHAR_SERVER_WRITE -> {
                     val bytes = char.value ?: return
@@ -479,6 +544,12 @@ class BleManager(private val context: Context) {
                 Log.w(TAG, "CCCD write failed: $status")
                 return
             }
+            if (isCdpMode) {
+                // NOTIFY subscription confirmed — negotiate larger MTU before sending CLIENT_INIT
+                Log.i(TAG, "CDP CCCD written OK → requesting MTU 512…")
+                gatt.requestMtu(512)
+                return
+            }
             if (isPairingMode) {
                 // NOTIFY subscription confirmed — now negotiate larger MTU before sending the public key
                 Log.i(TAG, "Pairing CCCD written OK → requesting MTU 185…")
@@ -491,6 +562,11 @@ class BleManager(private val context: Context) {
         }
 
         override fun onMtuChanged(gatt: BluetoothGatt, mtu: Int, status: Int) {
+            if (isCdpMode) {
+                Log.i(TAG, "CDP MTU=$mtu → starting UKEY2 handshake…")
+                cdpSession?.start()
+                return
+            }
             if (!isPairingMode) return
             val pubKeyBytes = pairingPubKeyBytes ?: return
             val service = gatt.getService(VehicleGattProfile.SERVICE_UUID) ?: run {
@@ -514,6 +590,105 @@ class BleManager(private val context: Context) {
                 _connectionState.value = state.copy(rssi = rssi)
                 _vehicleState.value = _vehicleState.value?.copy(bleRssi = rssi)
             }
+        }
+    }
+
+    // ─── CDP session setup ────────────────────────────────────────────────────
+
+    private fun startCdpSession(gatt: BluetoothGatt) {
+        val vehicleId = currentVehicleId ?: run {
+            _connectionState.value = BleConnectionState.Error("CDP: no vehicleId"); return
+        }
+
+        // Determine which service/characteristic to use for TX (phone → vehicle)
+        val mainSvc  = gatt.getService(VehicleGattProfile.SERVICE_UUID)    // 48B42B00
+        val vcim1910 = gatt.getService(VehicleGattProfile.SERVICE_VCIM_1910) // 0x1910
+
+        val (txService, txCharUuid, rxCharUuid) = when {
+            mainSvc  != null -> Triple(mainSvc,  VehicleGattProfile.CHAR_CLIENT_WRITE, VehicleGattProfile.CHAR_SERVER_WRITE)
+            vcim1910 != null -> Triple(vcim1910, VehicleGattProfile.CHAR_VCIM_WRITE,   VehicleGattProfile.CHAR_VCIM_NOTIFY)
+            else -> {
+                _connectionState.value = BleConnectionState.Error(
+                    "CDP: no compatible service (needs 48B42B00 or 0x1910)")
+                gatt.disconnect(); return
+            }
+        }
+
+        // Subscribe to NOTIFY (RX channel)
+        val rxChar = txService.getCharacteristic(rxCharUuid) ?: run {
+            _connectionState.value = BleConnectionState.Error("CDP: RX characteristic not found")
+            gatt.disconnect(); return
+        }
+        gatt.setCharacteristicNotification(rxChar, true)
+        rxChar.getDescriptor(VehicleGattProfile.DESC_CCCD)?.let { desc ->
+            desc.value = BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE
+            gatt.writeDescriptor(desc)
+        }
+
+        // Build session with transport: write CDP bytes to the TX characteristic
+        val txChar = txService.getCharacteristic(txCharUuid)
+        val session = CdpSession(
+            vehicleId = vehicleId,
+            send = { bytes ->
+                if (txChar != null) {
+                    txChar.value = bytes
+                    txChar.writeType = BluetoothGattCharacteristic.WRITE_TYPE_DEFAULT
+                    gatt.writeCharacteristic(txChar)
+                }
+            },
+            listener = cdpListener
+        )
+        cdpSession = session
+        _connectionState.value = BleConnectionState.CdpHandshaking(gatt.device)
+        // CCCD write completes in onDescriptorWrite → then we request MTU → then start session
+        Log.i(TAG, "[$vehicleId] CDP session created, waiting for CCCD write…")
+    }
+
+    private val cdpListener = object : CdpSession.Listener {
+        override fun onSecureChannelEstablished(session: CdpSession, needsVisualConfirm: Boolean) {
+            val g = gatt ?: return
+            val vehicleId = currentVehicleId ?: return
+            if (needsVisualConfirm) {
+                Log.i(TAG, "[$vehicleId] CDP secure channel — visual confirmation required")
+                _connectionState.value = BleConnectionState.CdpAwaitingConfirm(g.device, "")
+            } else {
+                Log.i(TAG, "[$vehicleId] CDP secure channel ready")
+                _connectionState.value = BleConnectionState.CdpReady(g.device)
+            }
+        }
+
+        override fun onEscrowToken(vehicleId: String, token: ByteArray, handle: ByteArray) {
+            val g = gatt ?: return
+            ioScope.launch {
+                // Load existing association or create new one
+                val existing = db.associatedCarDao().findById(vehicleId)
+                val updated = (existing ?: AssociatedCarEntity(
+                    id = vehicleId,
+                    macAddress = g.device.address,
+                    encryptionKey = ByteArray(0),
+                    identificationKey = ByteArray(0),
+                )).copy(escrowToken = token, tokenHandle = handle)
+                db.associatedCarDao().upsert(updated)
+                Log.i(TAG, "[$vehicleId] Escrow token stored (${token.size}B)")
+            }
+            _connectionState.value = BleConnectionState.CdpAssociated(g.device, vehicleId)
+        }
+
+        override fun onCommandAck(vehicleId: String, success: Boolean) {
+            val g = gatt ?: return
+            Log.i(TAG, "[$vehicleId] Command ack success=$success")
+            _connectionState.value = BleConnectionState.CdpReady(g.device)
+        }
+
+        override fun onError(vehicleId: String, reason: String) {
+            Log.e(TAG, "[$vehicleId] CDP error: $reason")
+            _connectionState.value = BleConnectionState.Error(reason, recoverable = true)
+        }
+
+        override fun onAssociationSuccess(vehicleId: String) {
+            val g = gatt ?: return
+            Log.i(TAG, "[$vehicleId] CDP association complete")
+            _connectionState.value = BleConnectionState.CdpReady(g.device)
         }
     }
 

@@ -19,6 +19,16 @@ sealed class BleConnectionState {
     data class VehicleBleLog(val device: BluetoothDevice, val entries: List<String>) : BleConnectionState()
     data class Error(val message: String, val recoverable: Boolean = true) : BleConnectionState()
 
+    // CDP / Connected Device Platform states
+    /** UKEY2 handshake in progress (CLIENT_INIT sent, waiting for SERVER_INIT). */
+    data class CdpHandshaking(val device: BluetoothDevice) : BleConnectionState()
+    /** Handshake complete — user must confirm the PIN shown on the vehicle screen. */
+    data class CdpAwaitingConfirm(val device: BluetoothDevice, val pinHex: String) : BleConnectionState()
+    /** CDP secure channel established; vehicle is ready for lock/unlock commands. */
+    data class CdpReady(val device: BluetoothDevice) : BleConnectionState()
+    /** Vehicle sent an escrow token — initial association complete, token stored in DB. */
+    data class CdpAssociated(val device: BluetoothDevice, val vehicleId: String) : BleConnectionState()
+
     val isConnected get() = this is Connected || this is Authenticating || this is Ready || this is PairingInProgress
     val isReady get() = this is Ready
 

@@ -5,10 +5,11 @@ import androidx.room.Database
 import androidx.room.Room
 import androidx.room.RoomDatabase
 
-@Database(entities = [VehicleEntity::class], version = 4, exportSchema = false)
+@Database(entities = [VehicleEntity::class, AssociatedCarEntity::class], version = 5, exportSchema = false)
 abstract class AppDatabase : RoomDatabase() {
 
     abstract fun vehicleDao(): VehicleDao
+    abstract fun associatedCarDao(): AssociatedCarDao
 
     companion object {
         @Volatile private var instance: AppDatabase? = null
