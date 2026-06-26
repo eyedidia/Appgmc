@@ -370,13 +370,10 @@ class DigitalKeyFragment : Fragment() {
             addView(hexInput)
         }
 
-        vehicleBleDialogInstance = MaterialAlertDialogBuilder(requireContext())
+        val dialog = MaterialAlertDialogBuilder(requireContext())
             .setTitle("Vehicle BLE — ${state.device.address}")
             .setView(container)
-            .setPositiveButton("Send") { _, _ ->
-                val hex = hexInput.text.toString().trim()
-                if (hex.isNotEmpty()) viewModel.sendDirectBleBytes(hex)
-            }
+            .setPositiveButton("Send", null)   // listener set below to prevent auto-dismiss
             .setNeutralButton("Copy") { _, _ ->
                 val logText = vehicleBleLogTv?.text?.toString() ?: ""
                 val cb = requireContext().getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
@@ -392,6 +389,16 @@ class DigitalKeyFragment : Fragment() {
                 vehicleBleDialogInstance = null
             }
             .show()
+
+        // Override Send to NOT auto-dismiss the dialog
+        dialog.getButton(androidx.appcompat.app.AlertDialog.BUTTON_POSITIVE).setOnClickListener {
+            val hex = hexInput.text.toString().trim()
+            if (hex.isNotEmpty()) {
+                viewModel.sendDirectBleBytes(hex)
+                hexInput.text?.clear()
+            }
+        }
+        vehicleBleDialogInstance = dialog
     }
 
     private fun showUnpairDialog(vehicle: VehicleEntity) {

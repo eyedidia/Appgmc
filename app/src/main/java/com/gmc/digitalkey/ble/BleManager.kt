@@ -301,13 +301,16 @@ class BleManager(private val context: Context) {
     fun sendDirectBleBytes(hexString: String) {
         if (!isProbeMode) return
         val g = gatt ?: return
-        // Support service 0x1910 (Sierra EV VCIM normal mode) as well as 4CDABAA0
         val (service, txCharUuid) = when {
             g.getService(VehicleGattProfile.SERVICE_VCIM_1910) != null ->
                 g.getService(VehicleGattProfile.SERVICE_VCIM_1910)!! to VehicleGattProfile.CHAR_VCIM_WRITE
             g.getService(VehicleGattProfile.SERVICE_DIRECT_DK) != null ->
                 g.getService(VehicleGattProfile.SERVICE_DIRECT_DK)!! to VehicleGattProfile.CHAR_DIRECT_DK_TX
-            else -> return
+            g.getService(VehicleGattProfile.SERVICE_FD06) != null ->
+                g.getService(VehicleGattProfile.SERVICE_FD06)!! to VehicleGattProfile.CHAR_FD03_WRITE
+            else -> {
+                Log.w(TAG, "sendDirectBleBytes: no known TX service found"); return
+            }
         }
         val txChar = service.getCharacteristic(txCharUuid) ?: return
         val bytes = hexString.replace(" ", "").chunked(2)
