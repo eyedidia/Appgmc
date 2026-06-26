@@ -105,8 +105,8 @@ class BleManager(private val context: Context) {
             .setScanMode(ScanSettings.SCAN_MODE_LOW_LATENCY)
             .build()
 
-        // GM real service UUIDs confirmed from myGMC APK (classes4.dex):
-        //   5E2A68A6 = Association (pairing window), 5E2A68A5 = Reconnection, 5EFD8B16 = V2
+        // GM service UUIDs: 48B42B00 = pairing, 0x1910 = VCIM normal-mode (Sierra EV "TY"),
+        // 5EFD8B16 = V2, 4CDABAA0 = secondary module, FD06 = GR-AC older stack
         val gmParcelUuids = VehicleGattProfile.SCAN_SERVICE_UUIDS
             .map { android.os.ParcelUuid(it) }.toSet()
 
@@ -275,8 +275,15 @@ class BleManager(private val context: Context) {
     fun sendDirectBleBytes(hexString: String) {
         if (!isProbeMode) return
         val g = gatt ?: return
-        val service = g.getService(VehicleGattProfile.SERVICE_DIRECT_DK) ?: return
-        val txChar = service.getCharacteristic(VehicleGattProfile.CHAR_DIRECT_DK_TX) ?: return
+        // Support service 0x1910 (Sierra EV VCIM normal mode) as well as 4CDABAA0
+        val (service, txCharUuid) = when {
+            g.getService(VehicleGattProfile.SERVICE_VCIM_1910) != null ->
+                g.getService(VehicleGattProfile.SERVICE_VCIM_1910)!! to VehicleGattProfile.CHAR_VCIM_WRITE
+            g.getService(VehicleGattProfile.SERVICE_DIRECT_DK) != null ->
+                g.getService(VehicleGattProfile.SERVICE_DIRECT_DK)!! to VehicleGattProfile.CHAR_DIRECT_DK_TX
+            else -> return
+        }
+        val txChar = service.getCharacteristic(txCharUuid) ?: return
         val bytes = hexString.replace(" ", "").chunked(2)
             .mapNotNull { it.toIntOrNull(16)?.toByte() }.toByteArray()
         txChar.value = bytes
@@ -572,13 +579,19 @@ class BleManager(private val context: Context) {
     // ─── Direct BLE probe ─────────────────────────────────────────────────────
 
     private fun performVehicleProbe(gatt: BluetoothGatt) {
-        // Support both 4CDABAA0 (Ultium secondary module) and FD06 (GR-AC series)
-        val directSvc = gatt.getService(VehicleGattProfile.SERVICE_DIRECT_DK)
-        val fd06Svc   = gatt.getService(VehicleGattProfile.SERVICE_FD06)
+        // Support 0x1910 (Sierra EV VCIM), 4CDABAA0 (Ultium secondary module), FD06 (GR-AC series)
+        val vcim1910Svc = gatt.getService(VehicleGattProfile.SERVICE_VCIM_1910)
+        val directSvc   = gatt.getService(VehicleGattProfile.SERVICE_DIRECT_DK)
+        val fd06Svc     = gatt.getService(VehicleGattProfile.SERVICE_FD06)
 
         val rxChar: BluetoothGattCharacteristic
         val svcLabel: String
         when {
+            vcim1910Svc != null -> {
+                rxChar   = vcim1910Svc.getCharacteristic(VehicleGattProfile.CHAR_VCIM_NOTIFY)
+                              ?: run { performGattDump(gatt); return }
+                svcLabel = "0x1910 (VCIM)"
+            }
             directSvc != null -> {
                 rxChar   = directSvc.getCharacteristic(VehicleGattProfile.CHAR_DIRECT_DK_RX)
                               ?: run { performGattDump(gatt); return }

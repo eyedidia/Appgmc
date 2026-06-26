@@ -32,6 +32,15 @@ object VehicleGattProfile {
     /** Phone → vehicle: pairing request, signed challenge response, lock/unlock commands (WRITE + WRITE_NR). */
     val CHAR_CLIENT_WRITE: UUID = UUID.fromString("5E2A68A6-27BE-43F9-8D1E-4546976FABD7")
 
+    // ── Sierra EV VCIM normal-mode channel (device name "TY", MAC 38:2C:E5:05:0F:9D) ──
+    // Confirmed from GATT dump 2026 GMC Sierra EV. Service 0x1910 is always advertising.
+    // Pairing (enrollment) uses 48B42B00 above; daily-use reconnect uses this service.
+    // 0x2B11 = phone → VCIM (WRITE | WRITE_NO_RESPONSE)
+    // 0x2B10 = VCIM → phone (NOTIFY)
+    val SERVICE_VCIM_1910: UUID = UUID.fromString("00001910-0000-1000-8000-00805F9B34FB")
+    val CHAR_VCIM_WRITE: UUID   = UUID.fromString("00002B11-0000-1000-8000-00805F9B34FB")
+    val CHAR_VCIM_NOTIFY: UUID  = UUID.fromString("00002B10-0000-1000-8000-00805F9B34FB")
+
     // ── Secondary BLE device observed nearby (FC:B8:B1:B8:46:D1) ──────────────
     // Separate physical BLE module on the vehicle (possibly TPMS, OTA DFU, or RKE module).
     // Nordic DFU service FE59 also present on that device — do NOT interact with DFU.
@@ -68,7 +77,8 @@ object VehicleGattProfile {
 
     /** Service UUIDs to flag in BLE scan — device lit green in raw scan when advertising any of these. */
     val SCAN_SERVICE_UUIDS = listOf(
-        SERVICE_UUID,                               // 48B42B00 — confirmed main DK service (Sierra EV / Ultium)
+        SERVICE_UUID,                               // 48B42B00 — confirmed pairing/enrollment service (Sierra EV)
+        SERVICE_VCIM_1910,                          // 0x1910   — confirmed normal-mode VCIM service (Sierra EV "TY")
         SERVICE_FD06,                               // FD06     — confirmed GR-AC devices (older/different protocol)
         SERVICE_DIRECT_DK,                          // 4CDABAA0 — secondary BLE module
         V2_SERVICE_UUID,                            // 5EFD8B16 — unconfirmed V2 variant
