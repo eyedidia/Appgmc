@@ -14,6 +14,7 @@ import android.widget.Toast
 import androidx.fragment.app.Fragment
 import androidx.preference.PreferenceManager
 import com.gmc.digitalkey.databinding.FragmentNfcAnalyzerBinding
+import com.gmc.digitalkey.nfc.HceService
 
 class NfcTagAnalyzerFragment : Fragment() {
 
@@ -48,6 +49,12 @@ class NfcTagAnalyzerFragment : Fragment() {
             Toast.makeText(requireContext(), "Copied", Toast.LENGTH_SHORT).show()
         }
 
+        binding.btnHceRefresh.setOnClickListener { refreshHceLog() }
+        binding.btnHceClear.setOnClickListener {
+            HceService.clearLog()
+            refreshHceLog()
+        }
+
         binding.btnEnroll.setOnClickListener {
             if (lastUidHex.isEmpty()) return@setOnClickListener
             val prefs = PreferenceManager.getDefaultSharedPreferences(requireContext())
@@ -78,6 +85,7 @@ class NfcTagAnalyzerFragment : Fragment() {
             null
         )
         binding.tvStatus.text = "Ready — tap tag to phone now"
+        refreshHceLog()
     }
 
     override fun onPause() {
@@ -88,6 +96,17 @@ class NfcTagAnalyzerFragment : Fragment() {
     override fun onDestroyView() {
         super.onDestroyView()
         _binding = null
+    }
+
+    // ── HCE log ───────────────────────────────────────────────────────────────
+
+    private fun refreshHceLog() {
+        val text = synchronized(HceService.apduLog) {
+            if (HceService.apduLog.isEmpty()) "(no HCE activity yet — tap phone to car door)"
+            else HceService.apduLog.joinToString("\n")
+        }
+        binding.tvHceLog.text = text
+        binding.scrollHceLog.post { binding.scrollHceLog.fullScroll(android.view.View.FOCUS_DOWN) }
     }
 
     // ── Tag analysis ──────────────────────────────────────────────────────────

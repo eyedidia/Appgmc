@@ -4,7 +4,9 @@
     android:requireDeviceUnlock="false">
     <aid-group android:description="@string/hce_aid_description"
         android:category="other">
-        <!-- GMC Digital Key AID -->
+        <!-- GMC Digital Key AID (exact) -->
         <aid-filter android:name="F04756494E47454E4B4579" />
+        <!-- Catch any proprietary F0-prefixed AID the vehicle may send -->
+        <aid-prefix-filter android:name="F0" />
     </aid-group>
 </host-apdu-service>

@@ -58,7 +58,7 @@
         android:background="@color/bg_surface"
         android:layout_marginBottom="12dp" />
 
-    <!-- Log area -->
+    <!-- Tag dump area -->
     <ScrollView
         android:id="@+id/scroll_log"
         android:layout_width="match_parent"
@@ -73,6 +73,70 @@
             android:text="Waiting for tag…"
             android:textColor="@color/text_hint"
             android:textSize="11sp"
+            android:fontFamily="monospace"
+            android:padding="8dp"
+            android:lineSpacingExtra="2dp" />
+
+    </ScrollView>
+
+    <!-- Divider -->
+    <View
+        android:layout_width="match_parent"
+        android:layout_height="1dp"
+        android:background="@color/bg_surface"
+        android:layout_marginTop="8dp"
+        android:layout_marginBottom="4dp" />
+
+    <!-- HCE Protocol Log header row -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:gravity="center_vertical"
+        android:layout_marginBottom="4dp">
+
+        <TextView
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="HCE Protocol Log (car → phone)"
+            android:textColor="@color/text_secondary"
+            android:textSize="11sp"
+            android:fontFamily="monospace" />
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btn_hce_refresh"
+            style="@style/Widget.GMC.Button.Outlined"
+            android:layout_width="wrap_content"
+            android:layout_height="32dp"
+            android:layout_marginEnd="6dp"
+            android:text="Refresh"
+            android:textSize="11sp" />
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btn_hce_clear"
+            style="@style/Widget.GMC.Button.Outlined"
+            android:layout_width="wrap_content"
+            android:layout_height="32dp"
+            android:text="Clear"
+            android:textSize="11sp" />
+
+    </LinearLayout>
+
+    <!-- HCE log scroll area (fixed height) -->
+    <ScrollView
+        android:id="@+id/scroll_hce_log"
+        android:layout_width="match_parent"
+        android:layout_height="160dp"
+        android:fillViewport="true">
+
+        <TextView
+            android:id="@+id/tv_hce_log"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="(no HCE activity yet — tap phone to car door)"
+            android:textColor="@color/text_hint"
+            android:textSize="10sp"
             android:fontFamily="monospace"
             android:padding="8dp"
             android:lineSpacingExtra="2dp" />
