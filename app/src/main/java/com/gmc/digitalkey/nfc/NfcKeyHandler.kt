@@ -5,7 +5,10 @@ import android.content.Intent
 import android.nfc.NfcAdapter
 import android.nfc.Tag
 import android.nfc.tech.IsoDep
+import android.widget.Toast
+import androidx.preference.PreferenceManager
 import com.gmc.digitalkey.ble.BleManager
+import com.gmc.digitalkey.ui.nfc.NfcTagAnalyzerFragment
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -46,28 +49,38 @@ class NfcKeyHandler(
     private fun processTag(tag: Tag) {
         val isoDep = runCatching { IsoDep.get(tag) }.getOrNull()
         if (isoDep != null) {
-            // ISO-DEP tag on car door handle — read vehicle AID and trigger BLE unlock
             runCatching {
                 isoDep.connect()
                 isoDep.timeout = 2000
-                // SELECT AID command
                 val selectAid = byteArrayOf(
-                    0x00.toByte(), 0xA4.toByte(), 0x04.toByte(), 0x00.toByte(),
-                    0x0B.toByte(),
-                    0xF0.toByte(), 0x47.toByte(), 0x56.toByte(), 0x49.toByte(),
-                    0x4E.toByte(), 0x47.toByte(), 0x45.toByte(), 0x4E.toByte(),
-                    0x4B.toByte(), 0x45.toByte(), 0x79.toByte()
+                    0x00, 0xA4.toByte(), 0x04, 0x00, 0x0B,
+                    0xF0.toByte(), 0x47, 0x56, 0x49, 0x4E, 0x47, 0x45, 0x4E, 0x4B, 0x45, 0x79
                 )
                 val response = isoDep.transceive(selectAid)
                 if (response.size >= 2 && response[response.size - 2] == 0x90.toByte()) {
-                    // Car NFC reader responded — trigger BLE unlock
                     bleManager.sendUnlock()
                 }
                 isoDep.close()
             }
         } else {
-            // Plain NFC tag — treat as unlock trigger if BLE is ready
-            bleManager.sendUnlock()
+            val uid = tag.id?.joinToString("") { "%02X".format(it) } ?: return
+            if (isEnrolledUid(uid)) {
+                bleManager.sendUnlock()
+            } else {
+                activity.runOnUiThread {
+                    Toast.makeText(
+                        activity,
+                        "Tag not enrolled — open NFC Tag Analyzer to enroll it",
+                        Toast.LENGTH_LONG
+                    ).show()
+                }
+            }
         }
+    }
+
+    private fun isEnrolledUid(uid: String): Boolean {
+        val prefs = PreferenceManager.getDefaultSharedPreferences(activity)
+        val enrolled = prefs.getStringSet(NfcTagAnalyzerFragment.PREF_ENROLLED_TAGS, emptySet()) ?: emptySet()
+        return enrolled.isEmpty() || uid in enrolled
     }
 }

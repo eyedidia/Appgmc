@@ -12,6 +12,7 @@ import android.view.View
 import android.view.ViewGroup
 import android.widget.Toast
 import androidx.fragment.app.Fragment
+import androidx.preference.PreferenceManager
 import com.gmc.digitalkey.databinding.FragmentNfcAnalyzerBinding
 
 class NfcTagAnalyzerFragment : Fragment() {
@@ -21,6 +22,7 @@ class NfcTagAnalyzerFragment : Fragment() {
 
     private var nfcAdapter: NfcAdapter? = null
     private var lastDump: String = ""
+    private var lastUidHex: String = ""
 
     override fun onCreateView(inflater: LayoutInflater, container: ViewGroup?, savedInstanceState: Bundle?): View {
         _binding = FragmentNfcAnalyzerBinding.inflate(inflater, container, false)
@@ -44,6 +46,20 @@ class NfcTagAnalyzerFragment : Fragment() {
             val cb = requireContext().getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
             cb.setPrimaryClip(ClipData.newPlainText("NFC Dump", lastDump))
             Toast.makeText(requireContext(), "Copied", Toast.LENGTH_SHORT).show()
+        }
+
+        binding.btnEnroll.setOnClickListener {
+            if (lastUidHex.isEmpty()) return@setOnClickListener
+            val prefs = PreferenceManager.getDefaultSharedPreferences(requireContext())
+            val enrolled = prefs.getStringSet(PREF_ENROLLED_TAGS, mutableSetOf())!!.toMutableSet()
+            if (enrolled.add(lastUidHex)) {
+                prefs.edit().putStringSet(PREF_ENROLLED_TAGS, enrolled).apply()
+                Toast.makeText(requireContext(), "Tag enrolled — tap it to unlock via BLE", Toast.LENGTH_LONG).show()
+                binding.btnEnroll.text = "Enrolled ✓"
+                binding.btnEnroll.isEnabled = false
+            } else {
+                Toast.makeText(requireContext(), "Already enrolled", Toast.LENGTH_SHORT).show()
+            }
         }
     }
 
@@ -81,13 +97,13 @@ class NfcTagAnalyzerFragment : Fragment() {
         sb.appendLine("╔══ NFC TAG DUMP ══╗")
         sb.appendLine()
 
-        // UID
         val uid = tag.id ?: ByteArray(0)
+        val uidHex = uid.joinToString("") { "%02X".format(it) }
         sb.appendLine("UID : ${uid.hex()}  (${uid.size * 8}-bit)")
         sb.appendLine("Tech: ${tag.techList.joinToString(", ") { it.substringAfterLast('.') }}")
         sb.appendLine()
 
-        // ── NFC-A (ISO 14443-3A) ──────────────────────────────────────────────
+        // ── NFC-A ─────────────────────────────────────────────────────────────
         NfcA.get(tag)?.use { tech ->
             sb.appendLine("┌─ NFC-A (ISO 14443-3A)")
             sb.appendLine("│  ATQA : ${tech.atqa.hex()}")
@@ -96,7 +112,7 @@ class NfcTagAnalyzerFragment : Fragment() {
             sb.appendLine()
         }
 
-        // ── NFC-B (ISO 14443-3B) ──────────────────────────────────────────────
+        // ── NFC-B ─────────────────────────────────────────────────────────────
         NfcB.get(tag)?.use { tech ->
             sb.appendLine("┌─ NFC-B (ISO 14443-3B)")
             sb.appendLine("│  ATQB         : ${tech.applicationData.hex()}")
@@ -105,7 +121,7 @@ class NfcTagAnalyzerFragment : Fragment() {
             sb.appendLine()
         }
 
-        // ── ISO-DEP (ISO 14443-4 — smart cards, key cards) ───────────────────
+        // ── ISO-DEP ───────────────────────────────────────────────────────────
         IsoDep.get(tag)?.let { tech ->
             sb.appendLine("┌─ ISO-DEP (ISO 14443-4) ← smart card / key card")
             tech.historicalBytes?.let { sb.appendLine("│  Historical bytes (ATS): ${it.hex()}  \"${it.ascii()}\"") }
@@ -113,39 +129,29 @@ class NfcTagAnalyzerFragment : Fragment() {
             sb.appendLine("│  ExtendedAPDU: ${tech.isExtendedLengthApduSupported}")
             sb.appendLine()
 
-            // Try talking to the card
             runCatching {
                 tech.connect()
                 tech.timeout = 3000
 
-                // SELECT GM Digital Key AID: F04756494E47454E4B4579
                 val gmAid = byteArrayOf(
                     0xF0.toByte(), 0x47, 0x56, 0x49, 0x4E, 0x47, 0x45, 0x4E, 0x4B, 0x45, 0x79
                 )
-                val selectGm = apduSelect(gmAid)
-                val rGm = tech.transceive(selectGm)
-                sb.appendLine("│  SELECT GM AID (F0GVINGENKey):")
-                sb.appendLine("│    → ${selectGm.hex()}")
+                val rGm = tech.transceive(apduSelect(gmAid))
+                sb.appendLine("│  SELECT GM AID:")
                 sb.appendLine("│    ← ${rGm.hex()}  ${swDescription(rGm)}")
-                sb.appendLine()
 
-                // SELECT PPSE (payment / Google Pay)
                 val ppse = "2PAY.SYS.DDF01".toByteArray()
                 val rPpse = tech.transceive(apduSelect(ppse))
-                sb.appendLine("│  SELECT PPSE (payment):")
+                sb.appendLine("│  SELECT PPSE:")
                 sb.appendLine("│    ← ${rPpse.hex()}  ${swDescription(rPpse)}")
-                sb.appendLine()
 
-                // SELECT NFC Forum Type 4 NDEF AID
                 val ndefAid = byteArrayOf(0xD2.toByte(), 0x76, 0x00, 0x00, 0x85.toByte(), 0x01, 0x01)
                 val rNdef = tech.transceive(apduSelect(ndefAid))
                 sb.appendLine("│  SELECT NDEF AID:")
                 sb.appendLine("│    ← ${rNdef.hex()}  ${swDescription(rNdef)}")
 
                 tech.close()
-            }.onFailure {
-                sb.appendLine("│  APDU comm error: ${it.message}")
-            }
+            }.onFailure { sb.appendLine("│  APDU error: ${it.message}") }
             sb.appendLine()
         }
 
@@ -181,6 +187,43 @@ class NfcTagAnalyzerFragment : Fragment() {
             sb.appendLine("│  Size   : ${tech.size} bytes")
             sb.appendLine("│  Sectors: ${tech.sectorCount}  Blocks: ${tech.blockCount}")
             sb.appendLine()
+
+            runCatching {
+                tech.connect()
+                tech.timeout = 5000
+                val probeSectors = minOf(tech.sectorCount, 4)
+                for (sector in 0 until probeSectors) {
+                    var authed = false
+                    var usedKey: ByteArray? = null
+                    var keyType = ""
+                    for (key in COMMON_KEYS) {
+                        if (tech.authenticateSectorWithKeyA(sector, key)) {
+                            authed = true; usedKey = key; keyType = "A"; break
+                        }
+                        if (tech.authenticateSectorWithKeyB(sector, key)) {
+                            authed = true; usedKey = key; keyType = "B"; break
+                        }
+                    }
+                    if (authed && usedKey != null) {
+                        sb.appendLine("│  Sector $sector  [Key$keyType: ${usedKey.hex()}]")
+                        val first = tech.sectorToBlock(sector)
+                        val count = tech.blockCountInSector(sector)
+                        for (b in first until first + count) {
+                            runCatching {
+                                val data = tech.readBlock(b)
+                                sb.appendLine("│    Block $b: ${data.hex()}")
+                            }.onFailure { sb.appendLine("│    Block $b: read error") }
+                        }
+                    } else {
+                        sb.appendLine("│  Sector $sector: ❌ auth failed (custom key)")
+                    }
+                }
+                if (tech.sectorCount > probeSectors) {
+                    sb.appendLine("│  (sectors $probeSectors–${tech.sectorCount - 1}: not probed)")
+                }
+                tech.close()
+            }.onFailure { sb.appendLine("│  Read error: ${it.message}") }
+            sb.appendLine()
         }
 
         // ── MIFARE Ultralight ─────────────────────────────────────────────────
@@ -190,7 +233,7 @@ class NfcTagAnalyzerFragment : Fragment() {
             sb.appendLine()
         }
 
-        // ── NFC-F (FeliCa) ────────────────────────────────────────────────────
+        // ── NFC-F ─────────────────────────────────────────────────────────────
         NfcF.get(tag)?.use { tech ->
             sb.appendLine("┌─ NFC-F (FeliCa / JIS 6319-4)")
             sb.appendLine("│  Manufacturer: ${tech.manufacturer.hex()}")
@@ -198,7 +241,7 @@ class NfcTagAnalyzerFragment : Fragment() {
             sb.appendLine()
         }
 
-        // ── NFC-V (ISO 15693) ─────────────────────────────────────────────────
+        // ── NFC-V ─────────────────────────────────────────────────────────────
         NfcV.get(tag)?.use { tech ->
             sb.appendLine("┌─ NFC-V (ISO 15693 / vicinity)")
             sb.appendLine("│  DSF ID         : 0x${tech.dsfId.toUByte().toString(16).uppercase()}")
@@ -210,6 +253,11 @@ class NfcTagAnalyzerFragment : Fragment() {
 
         val dump = sb.toString()
         lastDump = dump
+        lastUidHex = uidHex
+
+        val prefs = PreferenceManager.getDefaultSharedPreferences(requireContext())
+        val enrolled = prefs.getStringSet(PREF_ENROLLED_TAGS, emptySet()) ?: emptySet()
+        val alreadyEnrolled = uidHex in enrolled
 
         requireActivity().runOnUiThread {
             binding.tvStatus.text = "Tag read OK  UID=${uid.hex()}"
@@ -217,6 +265,14 @@ class NfcTagAnalyzerFragment : Fragment() {
             binding.tvLog.text = dump
             binding.tvLog.setTextColor(requireContext().getColor(com.gmc.digitalkey.R.color.text_primary))
             binding.btnCopy.visibility = View.VISIBLE
+            binding.btnEnroll.visibility = View.VISIBLE
+            if (alreadyEnrolled) {
+                binding.btnEnroll.text = "Enrolled ✓"
+                binding.btnEnroll.isEnabled = false
+            } else {
+                binding.btnEnroll.text = "Enroll"
+                binding.btnEnroll.isEnabled = true
+            }
             binding.scrollLog.post { binding.scrollLog.scrollTo(0, 0) }
         }
     }
@@ -249,14 +305,9 @@ class NfcTagAnalyzerFragment : Fragment() {
     }
 
     private fun tnfName(tnf: Int) = when (tnf) {
-        0 -> "Empty"
-        1 -> "Well-known"
-        2 -> "MIME type"
-        3 -> "Absolute URI"
-        4 -> "External"
-        5 -> "Unknown"
-        6 -> "Unchanged"
-        else -> "Reserved"
+        0 -> "Empty"; 1 -> "Well-known"; 2 -> "MIME type"
+        3 -> "Absolute URI"; 4 -> "External"; 5 -> "Unknown"
+        6 -> "Unchanged"; else -> "Reserved"
     }
 
     private fun mifareClassicType(t: Int) = when (t) {
@@ -274,5 +325,17 @@ class NfcTagAnalyzerFragment : Fragment() {
 
     private inline fun <T : TagTechnology> T.use(block: (T) -> Unit) {
         runCatching { block(this) }
+    }
+
+    companion object {
+        const val PREF_ENROLLED_TAGS = "enrolled_nfc_tags"
+
+        private val COMMON_KEYS = arrayOf(
+            byteArrayOf(0xFF.toByte(), 0xFF.toByte(), 0xFF.toByte(), 0xFF.toByte(), 0xFF.toByte(), 0xFF.toByte()),
+            byteArrayOf(0xA0.toByte(), 0xA1.toByte(), 0xA2.toByte(), 0xA3.toByte(), 0xA4.toByte(), 0xA5.toByte()),
+            byteArrayOf(0xD3.toByte(), 0xF7.toByte(), 0xD3.toByte(), 0xF7.toByte(), 0xD3.toByte(), 0xF7.toByte()),
+            byteArrayOf(0x00, 0x00, 0x00, 0x00, 0x00, 0x00),
+            byteArrayOf(0xB0.toByte(), 0xB1.toByte(), 0xB2.toByte(), 0xB3.toByte(), 0xB4.toByte(), 0xB5.toByte()),
+        )
     }
 }

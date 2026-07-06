@@ -33,6 +33,15 @@
             android:textSize="14sp" />
 
         <com.google.android.material.button.MaterialButton
+            android:id="@+id/btn_enroll"
+            style="@style/Widget.GMC.Button.Outlined"
+            android:layout_width="wrap_content"
+            android:layout_height="36dp"
+            android:layout_marginEnd="8dp"
+            android:text="Enroll"
+            android:visibility="gone" />
+
+        <com.google.android.material.button.MaterialButton
             android:id="@+id/btn_copy"
             style="@style/Widget.GMC.Button.Outlined"
             android:layout_width="wrap_content"
