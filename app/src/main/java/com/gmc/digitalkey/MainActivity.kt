@@ -99,6 +99,10 @@ class MainActivity : AppCompatActivity() {
                     navController.navigate(R.id.action_global_network_inspector)
                     true
                 }
+                R.id.drawer_nfc_analyzer -> {
+                    navController.navigate(R.id.action_global_nfc_analyzer)
+                    true
+                }
                 else -> false
             }
         }

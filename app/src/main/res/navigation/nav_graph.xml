@@ -53,6 +53,12 @@
         app:launchSingleTop="true"
         app:popUpTo="@id/homeFragment"
         app:popUpToInclusive="false" />
+    <action
+        android:id="@+id/action_global_nfc_analyzer"
+        app:destination="@id/nfcTagAnalyzerFragment"
+        app:launchSingleTop="true"
+        app:popUpTo="@id/homeFragment"
+        app:popUpToInclusive="false" />
 
     <fragment
         android:id="@+id/homeFragment"
@@ -139,5 +145,10 @@
         android:id="@+id/networkInspectorFragment"
         android:name="com.gmc.digitalkey.ui.research.NetworkInspectorFragment"
         android:label="@string/network_inspector_title" />
+
+    <fragment
+        android:id="@+id/nfcTagAnalyzerFragment"
+        android:name="com.gmc.digitalkey.ui.nfc.NfcTagAnalyzerFragment"
+        android:label="NFC Tag Analyzer" />
 
 </navigation>
