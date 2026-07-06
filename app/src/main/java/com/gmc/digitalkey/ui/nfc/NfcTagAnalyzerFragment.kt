@@ -205,9 +205,9 @@ class NfcTagAnalyzerFragment : Fragment() {
                         }
                     }
                     if (authed && usedKey != null) {
-                        sb.appendLine("│  Sector $sector  [Key$keyType: ${usedKey.hex()}]")
+                        sb.appendLine("│  Sector $sector  [Key$keyType: ${usedKey!!.hex()}]")
                         val first = tech.sectorToBlock(sector)
-                        val count = tech.blockCountInSector(sector)
+                        val count = tech.getBlockCountInSector(sector)
                         for (b in first until first + count) {
                             runCatching {
                                 val data = tech.readBlock(b)
