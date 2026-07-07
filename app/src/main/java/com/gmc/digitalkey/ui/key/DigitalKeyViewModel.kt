@@ -175,7 +175,7 @@ class DigitalKeyViewModel(app: Application) : AndroidViewModel(app) {
     @SuppressLint("MissingPermission")
     fun connectVehicle(vehicleId: String) {
         viewModelScope.launch {
-            val vehicle = db.vehicleDao().findById(vehicleId) ?: return@launch
+            val vehicle = db.vehicleDao().getById(vehicleId) ?: return@launch
             val device = runCatching {
                 @Suppress("DEPRECATION")
                 BluetoothAdapter.getDefaultAdapter()?.getRemoteDevice(vehicle.bleAddress)
