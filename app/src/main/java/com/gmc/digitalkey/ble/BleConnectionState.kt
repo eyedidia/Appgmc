@@ -22,8 +22,13 @@ sealed class BleConnectionState {
     // CDP / Connected Device Platform states
     /** UKEY2 handshake in progress (CLIENT_INIT sent, waiting for SERVER_INIT). */
     data class CdpHandshaking(val device: BluetoothDevice) : BleConnectionState()
-    /** Handshake complete — user must confirm the PIN shown on the vehicle screen. */
-    data class CdpAwaitingConfirm(val device: BluetoothDevice, val pinHex: String) : BleConnectionState()
+    /** Handshake complete — user must confirm the PIN shown on the vehicle screen.
+     *  [authBytes] is the full UKEY2 auth string; send it via OBD2 to auto-approve. */
+    data class CdpAwaitingConfirm(
+        val device: BluetoothDevice,
+        val pinHex: String,
+        val authBytes: ByteArray = ByteArray(0),
+    ) : BleConnectionState()
     /** CDP secure channel established; vehicle is ready for lock/unlock commands. */
     data class CdpReady(val device: BluetoothDevice) : BleConnectionState()
     /** Vehicle sent an escrow token — initial association complete, token stored in DB. */

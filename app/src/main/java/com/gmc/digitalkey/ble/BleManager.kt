@@ -644,14 +644,29 @@ class BleManager(private val context: Context) {
         Log.i(TAG, "[$vehicleId] CDP session created, waiting for CCCD write…")
     }
 
+    // Auth bytes from the current UKEY2 handshake — saved so OBD2 flow can use them
+    private var pendingAuthBytes: ByteArray = ByteArray(0)
+
+    /** Call after OBD2 device approval (or after the user confirms the PIN manually). */
+    fun confirmVisualAuth() {
+        cdpSession?.onVisualConfirmComplete()
+    }
+
     private val cdpListener = object : CdpSession.Listener {
-        override fun onSecureChannelEstablished(session: CdpSession, needsVisualConfirm: Boolean) {
+        override fun onSecureChannelEstablished(
+            session: CdpSession,
+            needsVisualConfirm: Boolean,
+            pinHex: String,
+            authBytes: ByteArray,
+        ) {
             val g = gatt ?: return
             val vehicleId = currentVehicleId ?: return
             if (needsVisualConfirm) {
-                Log.i(TAG, "[$vehicleId] CDP secure channel — visual confirmation required")
-                _connectionState.value = BleConnectionState.CdpAwaitingConfirm(g.device, "")
+                pendingAuthBytes = authBytes
+                Log.i(TAG, "[$vehicleId] CDP secure channel — PIN: $pinHex  (${authBytes.size}B auth)")
+                _connectionState.value = BleConnectionState.CdpAwaitingConfirm(g.device, pinHex, authBytes)
             } else {
+                pendingAuthBytes = ByteArray(0)
                 Log.i(TAG, "[$vehicleId] CDP secure channel ready")
                 _connectionState.value = BleConnectionState.CdpReady(g.device)
             }

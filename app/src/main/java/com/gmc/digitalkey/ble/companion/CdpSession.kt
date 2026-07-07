@@ -37,8 +37,14 @@ internal class CdpSession(
 
     interface Listener {
         /** Handshake complete and encrypted channel ready. If [needsVisualConfirm] is true,
-         *  the user must confirm the PIN shown on the vehicle infotainment. */
-        fun onSecureChannelEstablished(session: CdpSession, needsVisualConfirm: Boolean)
+         *  the user must confirm the PIN shown on the vehicle infotainment.
+         *  [pinHex] is the 6-hex-char PIN; [authBytes] is the full UKEY2 auth string. */
+        fun onSecureChannelEstablished(
+            session: CdpSession,
+            needsVisualConfirm: Boolean,
+            pinHex: String = "",
+            authBytes: ByteArray = ByteArray(0),
+        )
 
         /** Vehicle sent an escrow token during initial pairing — store in DB. */
         fun onEscrowToken(vehicleId: String, token: ByteArray, handle: ByteArray)
@@ -104,11 +110,11 @@ internal class CdpSession(
         expectedLength = -1
     }
 
-    /** Caller should invoke after user confirms PIN on vehicle screen. */
+    /** Caller should invoke after user confirms PIN on vehicle screen (or after OBD2 approval). */
     fun onVisualConfirmComplete() {
         if (state == State.AWAITING_VISUAL_CONFIRM) {
             state = State.SECURE
-            listener.onSecureChannelEstablished(this, needsVisualConfirm = false)
+            listener.onSecureChannelEstablished(this, needsVisualConfirm = false, pinHex = "", authBytes = ByteArray(0))
         }
     }
 
@@ -190,7 +196,7 @@ internal class CdpSession(
                 // For initial pairing, visual confirmation is required.
                 // For reconnect with stored credentials, the vehicle may skip this.
                 state = State.AWAITING_VISUAL_CONFIRM
-                listener.onSecureChannelEstablished(this, needsVisualConfirm = true)
+                listener.onSecureChannelEstablished(this, needsVisualConfirm = true, pinHex = pinHex, authBytes = authStr)
             }
 
             else -> Log.w(TAG, "[$vehicleId] Unexpected handshake message in state $state")
@@ -236,7 +242,7 @@ internal class CdpSession(
                 // State update from vehicle (lock/unlock status) — promote to SECURE
                 if (state == State.AWAITING_VISUAL_CONFIRM || state == State.SENT_CLIENT_FINISH) {
                     state = State.SECURE
-                    listener.onSecureChannelEstablished(this, needsVisualConfirm = false)
+                    listener.onSecureChannelEstablished(this, needsVisualConfirm = false, pinHex = "", authBytes = ByteArray(0))
                 }
             }
 

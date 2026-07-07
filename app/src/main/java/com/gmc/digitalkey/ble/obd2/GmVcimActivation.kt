@@ -721,6 +721,120 @@ object GmVcimActivation {
         }
     }
 
+    // --- BLE Device Approval ---
+
+    /**
+     * Send the phone's EC public key to the VCIM via UDS to register it as a trusted BLE device.
+     *
+     * Called when the CDP session reaches AWAITING_VISUAL_CONFIRM. If the VCIM accepts the key,
+     * the visual PIN confirmation step can be skipped (call BleManager.confirmVisualAuth() after
+     * this returns true).
+     *
+     * We probe several candidate DIDs and RoutineControl IDs because the exact command varies by
+     * VCIM firmware version. All responses are logged to [stepLog] for analysis.
+     */
+    suspend fun approveBlePairingDevice(
+        manager: Obd2Manager,
+        vcimAddress: Int,
+        ecPublicKeyBytes: ByteArray,
+        stepLog: MutableList<StepResult> = mutableListOf(),
+    ): Boolean {
+        val addrStr = if (vcimAddress >= 0x100) "0x%03X".format(vcimAddress) else "0x%02X".format(vcimAddress)
+
+        // Open extended session
+        try {
+            manager.sendUds(vcimAddress, byteArrayOf(SVC_DIAGNOSTIC_SESSION, SESSION_DEFAULT))
+            delay(300)
+        } catch (_: Exception) { delay(300) }
+        val sessResp = try {
+            manager.sendUds(vcimAddress, byteArrayOf(SVC_DIAGNOSTIC_SESSION, SESSION_EXTENDED))
+        } catch (e: Exception) {
+            stepLog += StepResult("ExtendedSession $addrStr (device approval)", false, e.message ?: "timeout")
+            return false
+        }
+        if (sessResp.firstOrNull() != 0x50.toByte()) {
+            stepLog += StepResult("ExtendedSession $addrStr (device approval)", false,
+                "Rejected: ${sessResp.toHex()}")
+            return false
+        }
+        stepLog += StepResult("ExtendedSession $addrStr (device approval)", true, "Accepted")
+
+        // Strip the 04 uncompressed-point prefix if present; send 64-byte X||Y
+        val keyPayload = when {
+            ecPublicKeyBytes.size == 65 && ecPublicKeyBytes[0] == 0x04.toByte() ->
+                ecPublicKeyBytes.copyOfRange(1, 65)
+            ecPublicKeyBytes.size > 64 -> ecPublicKeyBytes.copyOfRange(ecPublicKeyBytes.size - 64, ecPublicKeyBytes.size)
+            else -> ecPublicKeyBytes
+        }
+
+        // Candidate DID writes: phone EC public key → VCIM mobile-device-key DID
+        for (did in listOf(
+            byteArrayOf(0xF1.toByte(), 0xA1.toByte()),  // adjacent to activation DID — likely device key
+            byteArrayOf(0xF1.toByte(), 0xA2.toByte()),  // BLE auth token / device credential
+            byteArrayOf(0xF1.toByte(), 0xA3.toByte()),  // BLE device registration
+            byteArrayOf(0xF1.toByte(), 0xC2.toByte()),  // connected device credential
+            byteArrayOf(0x02.toByte(), 0x1B.toByte()),  // GM Ultium: mobile device key
+        )) {
+            try {
+                val r = manager.sendUds(vcimAddress,
+                    byteArrayOf(SVC_WRITE_DATA_BY_ID, *did, *keyPayload))
+                val label = "Write DID ${did.toHex()} (device key)"
+                when {
+                    r.firstOrNull() == 0x6E.toByte() -> {
+                        stepLog += StepResult(label, true, "Device key registered!")
+                        return true
+                    }
+                    r.getOrNull(2) == 0x22.toByte() || r.getOrNull(2) == 0x33.toByte() ->
+                        stepLog += StepResult(label, false, "NRC 0x%02X — SecurityAccess required".format(r.getOrNull(2)))
+                    r.getOrNull(2) == 0x31.toByte() ->
+                        stepLog += StepResult(label, false, "NRC 0x31 — DID not supported on this ECU")
+                    r.isEmpty() ->
+                        stepLog += StepResult(label, false, "No response")
+                    else ->
+                        stepLog += StepResult(label, false, r.getOrNull(2)?.let { "NRC 0x%02X".format(it) } ?: r.toHex())
+                }
+            } catch (e: Exception) {
+                stepLog += StepResult("Write DID ${did.toHex()} (device key)", false, e.message ?: "timeout")
+            }
+            delay(200)
+        }
+
+        // Candidate RoutineControl: register mobile device with EC public key as parameter
+        for ((routineId, label) in listOf(
+            byteArrayOf(0xF1.toByte(), 0xA3.toByte()) to "F1A3 — register mobile device",
+            byteArrayOf(0x02.toByte(), 0x10.toByte()) to "0210 — BLE device pairing",
+            byteArrayOf(0x02.toByte(), 0x03.toByte()) to "0203 — telematics device pair",
+            byteArrayOf(0x04.toByte(), 0x02.toByte()) to "0402 — connected services register",
+            byteArrayOf(0x02.toByte(), 0x1B.toByte()) to "021B — GM mobile device key routine",
+        )) {
+            try {
+                val r = manager.sendUds(vcimAddress,
+                    byteArrayOf(0x31.toByte(), 0x01.toByte(), *routineId, *keyPayload))
+                when {
+                    r.firstOrNull() == 0x71.toByte() -> {
+                        stepLog += StepResult("RoutineControl $label", true, "Device approved! ${r.toHex()}")
+                        return true
+                    }
+                    r.getOrNull(2) == 0x22.toByte() || r.getOrNull(2) == 0x33.toByte() ->
+                        stepLog += StepResult("RoutineControl $label", false,
+                            "NRC 0x%02X — SecurityAccess required".format(r.getOrNull(2)))
+                    r.getOrNull(2) == 0x31.toByte() ->
+                        stepLog += StepResult("RoutineControl $label", false, "NRC 0x31 — not supported")
+                    r.isEmpty() ->
+                        stepLog += StepResult("RoutineControl $label", false, "No response")
+                    else ->
+                        stepLog += StepResult("RoutineControl $label", false,
+                            r.getOrNull(2)?.let { "NRC 0x%02X".format(it) } ?: r.toHex())
+                }
+            } catch (e: Exception) {
+                stepLog += StepResult("RoutineControl $label", false, e.message ?: "timeout")
+            }
+            delay(200)
+        }
+
+        return false
+    }
+
     // --- DID Discovery ---
 
     suspend fun discoverVcimDids(manager: Obd2Manager, vcimAddress: Int,

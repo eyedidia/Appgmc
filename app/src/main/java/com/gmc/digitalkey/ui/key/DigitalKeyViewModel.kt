@@ -10,6 +10,9 @@ import com.gmc.digitalkey.ble.BleConnectionState
 import com.gmc.digitalkey.ble.BleManager
 import com.gmc.digitalkey.ble.QrPairingParser
 import com.gmc.digitalkey.ble.RawAdvert
+import com.gmc.digitalkey.ble.obd2.GmVcimActivation
+import com.gmc.digitalkey.ble.obd2.Obd2Manager
+import com.gmc.digitalkey.ble.obd2.Obd2State
 import com.gmc.digitalkey.crypto.KeyCredentialStore
 import com.gmc.digitalkey.db.AppDatabase
 import com.gmc.digitalkey.db.VehicleEntity
@@ -30,7 +33,8 @@ data class ScannedDevice(
 
 class DigitalKeyViewModel(app: Application) : AndroidViewModel(app) {
 
-    val bleManager = BleManager(app)
+    val bleManager  = BleManager(app)
+    val obd2Manager = Obd2Manager(app)
 
     companion object {
         private const val MAX_SCAN_RESULTS = 80
@@ -187,4 +191,41 @@ class DigitalKeyViewModel(app: Application) : AndroidViewModel(app) {
     fun sendUnlock() = bleManager.sendUnlock()
     fun sendLock()   = bleManager.sendLock()
     fun disconnect() = bleManager.disconnect()
+
+    // ─── OBD2-assisted BLE device authorization ───────────────────────────────
+
+    private val _obd2AuthLog = MutableStateFlow<List<String>>(emptyList())
+    val obd2AuthLog: StateFlow<List<String>> = _obd2AuthLog.asStateFlow()
+
+    val obd2State: StateFlow<Obd2State> = obd2Manager.state
+
+    fun connectObd2(device: BluetoothDevice) = obd2Manager.connect(device)
+
+    /**
+     * Send the phone's EC public key to the VCIM via OBD2 to register it as a trusted BLE
+     * device, bypassing the visual PIN confirmation step.
+     *
+     * Requires an active OBD2 adapter connection ([obd2State] == Connected/Ready).
+     * After success, auto-confirms the CDP visual auth so the BLE session moves to SECURE.
+     */
+    fun authorizeViaObd2(vehicleId: String, vcimAddress: Int = 0x80) {
+        viewModelScope.launch {
+            _obd2AuthLog.value = listOf("Connecting to VCIM 0x%02X…".format(vcimAddress))
+            val ecKeyBytes = KeyCredentialStore.getEcPublicKeyBytes(vehicleId) ?: run {
+                _obd2AuthLog.value = listOf("No EC key found — run BLE pair first")
+                return@launch
+            }
+            val stepLog = mutableListOf<GmVcimActivation.StepResult>()
+            val approved = try {
+                GmVcimActivation.approveBlePairingDevice(obd2Manager, vcimAddress, ecKeyBytes, stepLog)
+            } catch (e: Exception) {
+                stepLog += GmVcimActivation.StepResult("authorizeViaObd2", false, e.message ?: "error")
+                false
+            }
+            _obd2AuthLog.value = stepLog.map { (name, ok, detail) ->
+                "${if (ok) "✓" else "✗"} $name${if (detail.isNotEmpty()) " — $detail" else ""}"
+            }
+            if (approved) bleManager.confirmVisualAuth()
+        }
+    }
 }

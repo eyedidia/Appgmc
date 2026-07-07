@@ -86,6 +86,12 @@ class DigitalKeyFragment : Fragment() {
         binding.btnUnlock.setOnClickListener { viewModel.sendUnlock() }
         binding.btnLock.setOnClickListener   { viewModel.sendLock()   }
         binding.btnDisconnect.setOnClickListener { viewModel.disconnect() }
+        binding.btnObd2Auth.setOnClickListener {
+            val vehicleId = viewModel.pairedVehicles.value.firstOrNull()?.id ?: return@setOnClickListener
+            viewModel.authorizeViaObd2(vehicleId)
+            binding.tvObd2AuthLog.visibility = View.VISIBLE
+            binding.tvObd2AuthLog.text = "Sending device key to VCIM…"
+        }
 
         observeState()
     }
@@ -137,6 +143,13 @@ class DigitalKeyFragment : Fragment() {
                 ).show()
             }
         }
+        viewLifecycleOwner.lifecycleScope.launch {
+            viewModel.obd2AuthLog.collect { lines ->
+                if (lines.isEmpty()) return@collect
+                binding.tvObd2AuthLog.text = lines.joinToString("\n")
+                binding.tvObd2AuthLog.visibility = View.VISIBLE
+            }
+        }
     }
 
     @SuppressLint("MissingPermission")
@@ -174,8 +187,13 @@ class DigitalKeyFragment : Fragment() {
         val isActionable = state is BleConnectionState.Ready ||
                            state is BleConnectionState.CdpReady ||
                            state is BleConnectionState.CdpAssociated
+        val isAwaitingConfirm = state is BleConnectionState.CdpAwaitingConfirm
         binding.actionButtonsRow.visibility = if (isActionable) View.VISIBLE else View.GONE
         binding.btnDisconnect.visibility    = if (isActionable) View.VISIBLE else View.GONE
+        binding.btnObd2Auth.visibility      = if (isAwaitingConfirm) View.VISIBLE else View.GONE
+        if (!isAwaitingConfirm) {
+            binding.tvObd2AuthLog.visibility = View.GONE
+        }
 
         when (state) {
             is BleConnectionState.Ready -> {
