@@ -89,6 +89,43 @@
                     android:layout_marginTop="4dp"
                     tools:text="Connected • Signal Strong" />
 
+                <!-- Lock / Unlock actions — shown when BLE is ready -->
+                <LinearLayout
+                    android:id="@+id/action_buttons_row"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:layout_marginTop="16dp"
+                    android:visibility="gone">
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/btn_lock"
+                        style="@style/Widget.GMC.Button.Outlined"
+                        android:layout_width="0dp"
+                        android:layout_height="48dp"
+                        android:layout_weight="1"
+                        android:layout_marginEnd="8dp"
+                        android:text="Lock" />
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/btn_unlock"
+                        style="@style/Widget.GMC.Button"
+                        android:layout_width="0dp"
+                        android:layout_height="48dp"
+                        android:layout_weight="1"
+                        android:text="Unlock" />
+
+                </LinearLayout>
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btn_disconnect"
+                    style="@style/Widget.GMC.Button.Outlined"
+                    android:layout_width="wrap_content"
+                    android:layout_height="36dp"
+                    android:layout_marginTop="8dp"
+                    android:text="Disconnect"
+                    android:visibility="gone" />
+
             </LinearLayout>
         </com.google.android.material.card.MaterialCardView>
 

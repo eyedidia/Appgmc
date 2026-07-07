@@ -2,6 +2,7 @@ package com.gmc.digitalkey.ui.key
 
 import android.annotation.SuppressLint
 import android.app.Application
+import android.bluetooth.BluetoothAdapter
 import android.bluetooth.BluetoothDevice
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
@@ -168,4 +169,22 @@ class DigitalKeyViewModel(app: Application) : AndroidViewModel(app) {
     fun setPassiveUnlock(vehicleId: String, enabled: Boolean) {
         viewModelScope.launch { db.vehicleDao().setPassiveUnlock(vehicleId, enabled) }
     }
+
+    // ─── BLE connect / lock / unlock ─────────────────────────────────────────
+
+    @SuppressLint("MissingPermission")
+    fun connectVehicle(vehicleId: String) {
+        viewModelScope.launch {
+            val vehicle = db.vehicleDao().findById(vehicleId) ?: return@launch
+            val device = runCatching {
+                @Suppress("DEPRECATION")
+                BluetoothAdapter.getDefaultAdapter()?.getRemoteDevice(vehicle.bleAddress)
+            }.getOrNull() ?: return@launch
+            bleManager.connectCdp(device, vehicleId)
+        }
+    }
+
+    fun sendUnlock() = bleManager.sendUnlock()
+    fun sendLock()   = bleManager.sendLock()
+    fun disconnect() = bleManager.disconnect()
 }

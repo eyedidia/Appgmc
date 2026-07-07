@@ -333,14 +333,7 @@ class BleManager(private val context: Context) {
     fun sendUnlock() = if (isCdpMode) sendCdpUnlock() else sendCommand(VehicleGattProfile.Commands.UNLOCK, "UNLOCK")
 
     private fun sendCdpLock() {
-        val session = cdpSession ?: return
-        val vehicleId = currentVehicleId ?: return
-        ioScope.launch {
-            val car = db.associatedCarDao().findById(vehicleId) ?: run {
-                Log.w(TAG, "CDP lock: no association for $vehicleId"); return@launch
-            }
-            session.sendLock(car.tokenHandle, car.escrowToken)
-        }
+        cdpSession?.sendLock()
     }
 
     private fun sendCdpUnlock() {

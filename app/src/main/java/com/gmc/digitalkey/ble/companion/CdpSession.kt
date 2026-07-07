@@ -88,11 +88,10 @@ internal class CdpSession(
         processBuffer()
     }
 
-    /** Send lock command (only valid in SECURE state). */
-    fun sendLock(handle: ByteArray, encryptedToken: ByteArray) =
-        sendTrustedDeviceMessage(CdpMessages.buildUnlockMessage(handle, encryptedToken))
+    /** Send lock request (only valid in SECURE state). */
+    fun sendLock() = sendTrustedDeviceMessage(CdpMessages.buildLockMessage())
 
-    /** Send unlock command (only valid in SECURE state). */
+    /** Send unlock credentials (only valid in SECURE state). */
     fun sendUnlock(handle: ByteArray, encryptedToken: ByteArray) =
         sendTrustedDeviceMessage(CdpMessages.buildUnlockMessage(handle, encryptedToken))
 

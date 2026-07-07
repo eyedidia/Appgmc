@@ -83,6 +83,10 @@ class DigitalKeyFragment : Fragment() {
             }
         }
 
+        binding.btnUnlock.setOnClickListener { viewModel.sendUnlock() }
+        binding.btnLock.setOnClickListener   { viewModel.sendLock()   }
+        binding.btnDisconnect.setOnClickListener { viewModel.disconnect() }
+
         observeState()
     }
 
@@ -166,11 +170,42 @@ class DigitalKeyFragment : Fragment() {
     private fun updateKeyStatus(state: BleConnectionState) {
         val pulseAnim = AnimationUtils.loadAnimation(requireContext(), R.anim.ble_pulse)
 
+        // Default: hide action controls; states that need them will show them
+        val isActionable = state is BleConnectionState.Ready ||
+                           state is BleConnectionState.CdpReady ||
+                           state is BleConnectionState.CdpAssociated
+        binding.actionButtonsRow.visibility = if (isActionable) View.VISIBLE else View.GONE
+        binding.btnDisconnect.visibility    = if (isActionable) View.VISIBLE else View.GONE
+
         when (state) {
             is BleConnectionState.Ready -> {
                 binding.keyStatusLabel.text = getString(R.string.digital_key_active)
                 binding.keyStatusLabel.setTextColor(requireContext().getColor(R.color.status_connected))
                 binding.keyStatusSub.text = getString(R.string.ble_ready)
+                binding.bleIconCenter.setColorFilter(requireContext().getColor(R.color.status_connected))
+                binding.bleRingInner.startAnimation(pulseAnim)
+                binding.bleRingOuter.startAnimation(pulseAnim)
+            }
+            is BleConnectionState.CdpHandshaking -> {
+                binding.keyStatusLabel.text = getString(R.string.digital_key_active)
+                binding.keyStatusLabel.setTextColor(requireContext().getColor(R.color.status_warning))
+                binding.keyStatusSub.text = "Establishing secure channel…"
+                binding.bleIconCenter.setColorFilter(requireContext().getColor(R.color.status_warning))
+                binding.bleRingInner.startAnimation(pulseAnim)
+                binding.bleRingOuter.clearAnimation()
+            }
+            is BleConnectionState.CdpAwaitingConfirm -> {
+                binding.keyStatusLabel.text = getString(R.string.digital_key_active)
+                binding.keyStatusLabel.setTextColor(requireContext().getColor(R.color.status_warning))
+                val pin = if (state.pinHex.isNotEmpty()) " — PIN: ${state.pinHex}" else ""
+                binding.keyStatusSub.text = "Confirm on vehicle display$pin"
+                binding.bleIconCenter.setColorFilter(requireContext().getColor(R.color.status_warning))
+                binding.bleRingInner.startAnimation(pulseAnim)
+            }
+            is BleConnectionState.CdpReady, is BleConnectionState.CdpAssociated -> {
+                binding.keyStatusLabel.text = getString(R.string.digital_key_active)
+                binding.keyStatusLabel.setTextColor(requireContext().getColor(R.color.status_connected))
+                binding.keyStatusSub.text = "Digital Key ready"
                 binding.bleIconCenter.setColorFilter(requireContext().getColor(R.color.status_connected))
                 binding.bleRingInner.startAnimation(pulseAnim)
                 binding.bleRingOuter.startAnimation(pulseAnim)
@@ -184,8 +219,11 @@ class DigitalKeyFragment : Fragment() {
                 binding.bleRingOuter.clearAnimation()
             }
             is BleConnectionState.Connecting, is BleConnectionState.Authenticating -> {
+                binding.keyStatusLabel.text = getString(R.string.digital_key_inactive)
+                binding.keyStatusLabel.setTextColor(requireContext().getColor(R.color.text_primary))
                 binding.keyStatusSub.text = getString(R.string.ble_connecting)
                 binding.bleIconCenter.setColorFilter(requireContext().getColor(R.color.status_warning))
+                binding.bleRingInner.startAnimation(pulseAnim)
             }
             is BleConnectionState.GattDump -> {
                 binding.keyStatusSub.text = "GATT dump: ${state.services.size} services"
@@ -197,13 +235,14 @@ class DigitalKeyFragment : Fragment() {
                 binding.bleIconCenter.setColorFilter(requireContext().getColor(R.color.gmc_red))
                 val text = state.entries.joinToString("\n").ifEmpty { "Listening…" }
                 if (vehicleBleDialogInstance?.isShowing == true) {
-                    vehicleBleLogTv?.text = text  // update in-place
+                    vehicleBleLogTv?.text = text
                 } else {
                     showVehicleBleLogDialog(state)
                 }
             }
             is BleConnectionState.BluetoothOff -> {
                 binding.keyStatusLabel.text = getString(R.string.digital_key_inactive)
+                binding.keyStatusLabel.setTextColor(requireContext().getColor(R.color.text_primary))
                 binding.keyStatusSub.text = getString(R.string.ble_off)
                 binding.bleIconCenter.setColorFilter(requireContext().getColor(R.color.status_error))
                 binding.bleRingInner.clearAnimation()
@@ -211,6 +250,7 @@ class DigitalKeyFragment : Fragment() {
             }
             else -> {
                 binding.keyStatusLabel.text = getString(R.string.digital_key_inactive)
+                binding.keyStatusLabel.setTextColor(requireContext().getColor(R.color.text_primary))
                 binding.keyStatusSub.text = getString(R.string.ble_disconnected)
                 binding.bleIconCenter.clearColorFilter()
                 binding.bleRingInner.clearAnimation()
@@ -296,6 +336,12 @@ class DigitalKeyFragment : Fragment() {
             cardView.findViewById<android.widget.TextView>(android.R.id.text2)?.apply {
                 text = if (vehicle.vin.isNotEmpty()) "${vehicle.bleAddress} • ${vehicle.vin}" else vehicle.bleAddress
                 setTextColor(requireContext().getColor(R.color.text_secondary))
+            }
+            cardView.isClickable = true
+            cardView.isFocusable = true
+            cardView.setOnClickListener {
+                viewModel.connectVehicle(vehicle.id)
+                Toast.makeText(requireContext(), "Connecting to ${vehicle.displayName}…", Toast.LENGTH_SHORT).show()
             }
             cardView.setOnLongClickListener {
                 showUnpairDialog(vehicle)

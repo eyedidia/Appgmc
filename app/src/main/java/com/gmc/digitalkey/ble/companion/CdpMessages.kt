@@ -113,6 +113,13 @@ internal object CdpMessages {
         buildTrustedDeviceMessage(TD_UNLOCK_CREDENTIALS, buildUnlockCredentials(handle, encryptedToken))
 
     /**
+     * Build a lock request. Uses TD_STATE with payload [0x01] to signal "phone requests lock".
+     * The exact format is unconfirmed — update once verified against the vehicle.
+     */
+    fun buildLockMessage(): ByteArray =
+        buildTrustedDeviceMessage(TD_STATE, byteArrayOf(0x01))
+
+    /**
      * Parse an escrow token response from the vehicle.
      * The vehicle sends TrustedDeviceMessage(ESCROW_TOKEN, <token bytes>) during initial pairing.
      */
