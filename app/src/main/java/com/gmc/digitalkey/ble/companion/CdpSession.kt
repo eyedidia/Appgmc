@@ -110,9 +110,17 @@ internal class CdpSession(
         expectedLength = -1
     }
 
-    /** Caller should invoke after user confirms PIN on vehicle screen (or after OBD2 approval). */
+    /**
+     * Caller should invoke after user confirms PIN on vehicle screen (or after OBD2 approval).
+     *
+     * Sends TD_ACK to the vehicle over the secure channel — this is the phone-side signal that
+     * the pairing is approved.  The vehicle should respond with TD_ESCROW_TOKEN (initial pairing)
+     * or TD_STATE (reconnect) to complete the association.
+     */
     fun onVisualConfirmComplete() {
         if (state == State.AWAITING_VISUAL_CONFIRM) {
+            // Notify vehicle that the phone has confirmed the pairing PIN
+            sendTrustedDeviceMessage(CdpMessages.buildTrustedDeviceMessage(CdpMessages.TD_ACK))
             state = State.SECURE
             listener.onSecureChannelEstablished(this, needsVisualConfirm = false, pinHex = "", authBytes = ByteArray(0))
         }

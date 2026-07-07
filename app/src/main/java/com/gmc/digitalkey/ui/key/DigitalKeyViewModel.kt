@@ -176,8 +176,13 @@ class DigitalKeyViewModel(app: Application) : AndroidViewModel(app) {
 
     // ─── BLE connect / lock / unlock ─────────────────────────────────────────
 
+    // Tracks the vehicleId of the current connection attempt so OBD2 auth knows which key to use
+    var connectingVehicleId: String? = null
+        private set
+
     @SuppressLint("MissingPermission")
     fun connectVehicle(vehicleId: String) {
+        connectingVehicleId = vehicleId
         viewModelScope.launch {
             val vehicle = db.vehicleDao().getById(vehicleId) ?: return@launch
             val device = runCatching {
@@ -187,6 +192,13 @@ class DigitalKeyViewModel(app: Application) : AndroidViewModel(app) {
             bleManager.connectCdp(device, vehicleId)
         }
     }
+
+    /**
+     * Phone-side confirmation that the PIN shown on the vehicle matches.
+     * Sends TD_ACK to the vehicle over the BLE secure channel — the vehicle should respond
+     * with TD_ESCROW_TOKEN to complete the pairing association.
+     */
+    fun confirmPairing() = bleManager.confirmVisualAuth()
 
     fun sendUnlock() = bleManager.sendUnlock()
     fun sendLock()   = bleManager.sendLock()
@@ -208,7 +220,8 @@ class DigitalKeyViewModel(app: Application) : AndroidViewModel(app) {
      * Requires an active OBD2 adapter connection ([obd2State] == Connected/Ready).
      * After success, auto-confirms the CDP visual auth so the BLE session moves to SECURE.
      */
-    fun authorizeViaObd2(vehicleId: String, vcimAddress: Int = 0x80) {
+    fun authorizeViaObd2(vehicleId: String = connectingVehicleId ?: "", vcimAddress: Int = 0x80) {
+        if (vehicleId.isEmpty()) { _obd2AuthLog.value = listOf("No active pairing — tap a vehicle first"); return }
         viewModelScope.launch {
             _obd2AuthLog.value = listOf("Connecting to VCIM 0x%02X…".format(vcimAddress))
             val ecKeyBytes = KeyCredentialStore.getEcPublicKeyBytes(vehicleId) ?: run {

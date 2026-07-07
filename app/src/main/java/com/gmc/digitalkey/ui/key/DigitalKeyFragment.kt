@@ -86,9 +86,13 @@ class DigitalKeyFragment : Fragment() {
         binding.btnUnlock.setOnClickListener { viewModel.sendUnlock() }
         binding.btnLock.setOnClickListener   { viewModel.sendLock()   }
         binding.btnDisconnect.setOnClickListener { viewModel.disconnect() }
+        binding.btnConfirmPairing.setOnClickListener {
+            viewModel.confirmPairing()
+            binding.tvObd2AuthLog.visibility = View.VISIBLE
+            binding.tvObd2AuthLog.text = "Sending pairing confirmation to vehicle…"
+        }
         binding.btnObd2Auth.setOnClickListener {
-            val vehicleId = viewModel.pairedVehicles.value.firstOrNull()?.id ?: return@setOnClickListener
-            viewModel.authorizeViaObd2(vehicleId)
+            viewModel.authorizeViaObd2()
             binding.tvObd2AuthLog.visibility = View.VISIBLE
             binding.tvObd2AuthLog.text = "Sending device key to VCIM…"
         }
@@ -188,9 +192,9 @@ class DigitalKeyFragment : Fragment() {
                            state is BleConnectionState.CdpReady ||
                            state is BleConnectionState.CdpAssociated
         val isAwaitingConfirm = state is BleConnectionState.CdpAwaitingConfirm
-        binding.actionButtonsRow.visibility = if (isActionable) View.VISIBLE else View.GONE
-        binding.btnDisconnect.visibility    = if (isActionable) View.VISIBLE else View.GONE
-        binding.btnObd2Auth.visibility      = if (isAwaitingConfirm) View.VISIBLE else View.GONE
+        binding.actionButtonsRow.visibility  = if (isActionable) View.VISIBLE else View.GONE
+        binding.btnDisconnect.visibility     = if (isActionable) View.VISIBLE else View.GONE
+        binding.pairingConfirmRow.visibility = if (isAwaitingConfirm) View.VISIBLE else View.GONE
         if (!isAwaitingConfirm) {
             binding.tvObd2AuthLog.visibility = View.GONE
         }

@@ -126,15 +126,34 @@
                     android:text="Disconnect"
                     android:visibility="gone" />
 
-                <!-- OBD2 authorization — shown while waiting for visual PIN confirmation -->
-                <com.google.android.material.button.MaterialButton
-                    android:id="@+id/btn_obd2_auth"
-                    style="@style/Widget.GMC.Button.Outlined"
-                    android:layout_width="wrap_content"
-                    android:layout_height="36dp"
+                <!-- Pairing confirmation row — shown while waiting for visual PIN confirmation -->
+                <LinearLayout
+                    android:id="@+id/pairing_confirm_row"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:gravity="center"
                     android:layout_marginTop="8dp"
-                    android:text="Authorize via OBD2"
-                    android:visibility="gone" />
+                    android:visibility="gone">
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/btn_confirm_pairing"
+                        style="@style/Widget.Material3.Button"
+                        android:layout_width="0dp"
+                        android:layout_height="36dp"
+                        android:layout_weight="1"
+                        android:layout_marginEnd="8dp"
+                        android:text="✓ Confirm PIN" />
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/btn_obd2_auth"
+                        style="@style/Widget.GMC.Button.Outlined"
+                        android:layout_width="0dp"
+                        android:layout_height="36dp"
+                        android:layout_weight="1"
+                        android:text="Authorize via OBD2" />
+
+                </LinearLayout>
 
                 <TextView
                     android:id="@+id/tv_obd2_auth_log"
