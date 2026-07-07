@@ -1,0 +1,64 @@
+<?xml version="1.0" encoding="utf-8"?>
+<menu xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <group
+        android:id="@+id/group_connect"
+        android:checkableBehavior="none">
+        <item
+            android:id="@+id/drawer_obd2"
+            android:icon="@drawable/ic_ble"
+            android:title="@string/drawer_obd2" />
+        <item
+            android:id="@+id/drawer_doip"
+            android:icon="@drawable/ic_car_hummer"
+            android:title="@string/drawer_doip" />
+        <item
+            android:id="@+id/drawer_vehicle_select"
+            android:icon="@drawable/ic_car_hummer"
+            android:title="@string/drawer_vehicle_select" />
+    </group>
+
+    <item android:title="@string/drawer_controls_section">
+        <menu>
+            <item
+                android:id="@+id/drawer_digital_key"
+                android:icon="@drawable/ic_lock"
+                android:title="@string/drawer_digital_key" />
+            <item
+                android:id="@+id/drawer_unlock"
+                android:icon="@drawable/ic_unlock"
+                android:title="@string/drawer_unlock" />
+            <item
+                android:id="@+id/drawer_lock"
+                android:icon="@drawable/ic_lock"
+                android:title="@string/drawer_lock" />
+            <item
+                android:id="@+id/drawer_start_engine"
+                android:enabled="false"
+                android:icon="@drawable/ic_car_hummer"
+                android:title="@string/drawer_start_engine_soon" />
+        </menu>
+    </item>
+
+    <item android:title="@string/drawer_app_section">
+        <menu>
+            <item
+                android:id="@+id/drawer_charge"
+                android:icon="@drawable/ic_charge"
+                android:title="@string/drawer_charge" />
+            <item
+                android:id="@+id/drawer_settings"
+                android:icon="@drawable/ic_nfc"
+                android:title="@string/drawer_settings" />
+            <item
+                android:id="@+id/drawer_network_inspector"
+                android:icon="@drawable/ic_ble"
+                android:title="@string/drawer_network_inspector" />
+            <item
+                android:id="@+id/drawer_nfc_analyzer"
+                android:icon="@drawable/ic_nfc"
+                android:title="NFC Tag Analyzer" />
+        </menu>
+    </item>
+
+</menu>

@@ -1,0 +1,521 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.core.widget.NestedScrollView
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@color/bg_primary"
+    android:fillViewport="true">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:padding="20dp">
+
+        <ImageView
+            android:layout_width="wrap_content"
+            android:layout_height="36dp"
+            android:src="@drawable/ic_gmc_logo"
+            android:contentDescription="GMC"
+            android:layout_marginBottom="8dp" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="@string/select_model"
+            android:textColor="@color/text_primary"
+            android:textSize="20sp"
+            android:fontFamily="sans-serif-medium"
+            android:layout_marginBottom="20dp" />
+
+        <!-- OnStar activation reminder -->
+        <com.google.android.material.card.MaterialCardView
+            android:id="@+id/onstar_reminder"
+            style="@style/Widget.GMC.Card"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="16dp"
+            app:strokeColor="@color/status_warning"
+            app:strokeWidth="1dp">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:padding="12dp"
+                android:gravity="center_vertical">
+
+                <TextView
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="⚠ Before scanning: activate OnStar and enable Digital Key from your vehicle's infotainment screen (Settings → Vehicle → Connected Services → Digital Key → Add device)"
+                    android:textColor="@color/status_warning"
+                    android:textSize="12sp"
+                    android:layout_marginEnd="8dp" />
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btn_show_guide"
+                    style="@style/Widget.MaterialComponents.Button.TextButton"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Guide"
+                    android:textColor="@color/gmc_red"
+                    android:textSize="12sp"
+                    android:padding="4dp"
+                    android:minWidth="0dp" />
+
+            </LinearLayout>
+        </com.google.android.material.card.MaterialCardView>
+
+        <!-- VIN entry card -->
+        <com.google.android.material.card.MaterialCardView
+            style="@style/Widget.GMC.Card"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="16dp">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:padding="16dp">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="VEHICLE VIN (OPTIONAL)"
+                    android:textColor="@color/text_hint"
+                    android:textSize="11sp"
+                    android:letterSpacing="0.1"
+                    android:layout_marginBottom="8dp" />
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:gravity="center_vertical">
+
+                    <com.google.android.material.textfield.TextInputLayout
+                        android:id="@+id/vin_input_layout"
+                        style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox.Dense"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:layout_marginEnd="8dp"
+                        android:hint="17-character VIN"
+                        app:counterEnabled="true"
+                        app:counterMaxLength="17"
+                        app:boxStrokeColor="@color/gmc_red"
+                        app:hintTextColor="@color/text_hint">
+
+                        <com.google.android.material.textfield.TextInputEditText
+                            android:id="@+id/vin_input"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:textColor="@color/text_primary"
+                            android:textSize="13sp"
+                            android:inputType="textCapCharacters"
+                            android:maxLength="17"
+                            android:imeOptions="actionDone"
+                            android:maxLines="1"
+                            android:fontFamily="monospace" />
+                    </com.google.android.material.textfield.TextInputLayout>
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/btn_scan_qr"
+                        style="@style/Widget.GMC.Button.Outlined"
+                        android:layout_width="52dp"
+                        android:layout_height="52dp"
+                        android:padding="0dp"
+                        app:icon="@android:drawable/ic_menu_camera"
+                        app:iconGravity="textStart"
+                        app:iconPadding="0dp" />
+
+                </LinearLayout>
+
+                <TextView
+                    android:id="@+id/vin_status"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="Scan the QR code on your door jamb, or enter VIN manually to identify your vehicle"
+                    android:textColor="@color/text_hint"
+                    android:textSize="12sp"
+                    android:layout_marginTop="6dp" />
+
+            </LinearLayout>
+        </com.google.android.material.card.MaterialCardView>
+
+        <!-- Decoded VIN info card (shown after successful decode) -->
+        <com.google.android.material.card.MaterialCardView
+            android:id="@+id/decoded_card"
+            style="@style/Widget.GMC.Card"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="16dp"
+            android:visibility="gone"
+            app:strokeColor="@color/status_connected"
+            app:strokeWidth="1dp">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:padding="12dp"
+                android:gravity="center_vertical">
+
+                <ImageView
+                    android:id="@+id/decoded_vehicle_image"
+                    android:layout_width="100dp"
+                    android:layout_height="68dp"
+                    android:scaleType="centerCrop"
+                    android:src="@drawable/ic_car_hummer"
+                    android:contentDescription="Vehicle"
+                    android:layout_marginEnd="12dp" />
+
+                <LinearLayout
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:orientation="vertical">
+
+                    <TextView
+                        android:id="@+id/decoded_title"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:textColor="@color/text_primary"
+                        android:textSize="15sp"
+                        android:fontFamily="sans-serif-medium"
+                        tools:text="2024 GMC Hummer EV" />
+
+                    <TextView
+                        android:id="@+id/decoded_detail"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:textColor="@color/text_secondary"
+                        android:textSize="12sp"
+                        android:layout_marginTop="2dp"
+                        tools:text="Pickup · Electric" />
+
+                    <TextView
+                        android:id="@+id/decoded_badge"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="✓ Verified via NHTSA"
+                        android:textColor="@color/status_connected"
+                        android:textSize="11sp"
+                        android:layout_marginTop="4dp" />
+
+                </LinearLayout>
+
+                <ProgressBar
+                    android:id="@+id/decode_progress"
+                    android:layout_width="24dp"
+                    android:layout_height="24dp"
+                    android:indeterminate="true"
+                    android:indeterminateTint="@color/gmc_red"
+                    android:visibility="gone" />
+
+            </LinearLayout>
+        </com.google.android.material.card.MaterialCardView>
+
+        <!-- Scan status card -->
+        <com.google.android.material.card.MaterialCardView
+            style="@style/Widget.GMC.Card"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="16dp">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:padding="16dp">
+
+                <!-- Scan controls row -->
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:gravity="center_vertical"
+                    android:layout_marginBottom="12dp">
+
+                    <ProgressBar
+                        android:id="@+id/scan_progress"
+                        android:layout_width="20dp"
+                        android:layout_height="20dp"
+                        android:indeterminate="true"
+                        android:indeterminateTint="@color/gmc_red"
+                        android:visibility="gone"
+                        android:layout_marginEnd="10dp" />
+
+                    <TextView
+                        android:id="@+id/scan_status_text"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:text="Tap Scan to find nearby vehicles"
+                        android:textColor="@color/text_secondary"
+                        android:textSize="13sp" />
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/btn_scan"
+                        style="@style/Widget.GMC.Button.Outlined"
+                        android:layout_width="wrap_content"
+                        android:layout_height="36dp"
+                        android:text="Scan"
+                        android:textSize="13sp"
+                        android:paddingStart="12dp"
+                        android:paddingEnd="12dp" />
+                </LinearLayout>
+
+                <!-- Filter row -->
+                <com.google.android.material.textfield.TextInputLayout
+                    android:id="@+id/filter_layout"
+                    style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox.Dense"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginBottom="10dp"
+                    android:hint="Filter by name…"
+                    app:boxStrokeColor="@color/gmc_red"
+                    app:hintTextColor="@color/text_hint"
+                    app:startIconDrawable="@android:drawable/ic_menu_search"
+                    app:startIconTint="@color/text_hint">
+
+                    <com.google.android.material.textfield.TextInputEditText
+                        android:id="@+id/filter_input"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:textColor="@color/text_primary"
+                        android:textSize="13sp"
+                        android:inputType="text"
+                        android:imeOptions="actionDone"
+                        android:maxLines="1" />
+                </com.google.android.material.textfield.TextInputLayout>
+
+                <!-- Filter chips row -->
+                <com.google.android.material.chip.ChipGroup
+                    android:id="@+id/chip_group_filters"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginBottom="12dp"
+                    app:singleSelection="false"
+                    app:selectionRequired="false">
+
+                    <com.google.android.material.chip.Chip
+                        android:id="@+id/chip_gmc_only"
+                        style="@style/Widget.MaterialComponents.Chip.Filter"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="GMC only"
+                        android:textSize="12sp"
+                        app:chipBackgroundColor="@color/bg_elevated"
+                        app:chipStrokeColor="@color/gmc_red"
+                        app:chipStrokeWidth="1dp"
+                        app:checkedIconTint="@color/gmc_red"
+                        android:textColor="@color/text_secondary" />
+
+                    <com.google.android.material.chip.Chip
+                        android:id="@+id/chip_near_only"
+                        style="@style/Widget.MaterialComponents.Chip.Filter"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="Near only (>−70 dBm)"
+                        android:textSize="12sp"
+                        app:chipBackgroundColor="@color/bg_elevated"
+                        app:chipStrokeColor="@color/gmc_red"
+                        app:chipStrokeWidth="1dp"
+                        app:checkedIconTint="@color/gmc_red"
+                        android:textColor="@color/text_secondary" />
+
+                    <com.google.android.material.chip.Chip
+                        android:id="@+id/chip_close_only"
+                        style="@style/Widget.MaterialComponents.Chip.Filter"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="Very close (>−60 dBm)"
+                        android:textSize="12sp"
+                        app:chipBackgroundColor="@color/bg_elevated"
+                        app:chipStrokeColor="@color/gmc_red"
+                        app:chipStrokeWidth="1dp"
+                        app:checkedIconTint="@color/gmc_red"
+                        android:textColor="@color/text_secondary" />
+
+                </com.google.android.material.chip.ChipGroup>
+
+                <!-- Devices list -->
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="NEARBY DEVICES"
+                    android:textColor="@color/text_hint"
+                    android:textSize="11sp"
+                    android:letterSpacing="0.1"
+                    android:layout_marginBottom="8dp" />
+
+                <LinearLayout
+                    android:id="@+id/devices_container"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical" />
+
+                <TextView
+                    android:id="@+id/no_devices_hint"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="No devices found. Make sure your vehicle's Bluetooth is on."
+                    android:textColor="@color/text_hint"
+                    android:textSize="13sp"
+                    android:gravity="center"
+                    android:padding="12dp"
+                    android:visibility="visible" />
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btn_obd2_activate"
+                    style="@style/Widget.GMC.Button.Outlined"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="No vehicle found? Try OBD2 activation"
+                    android:textSize="12sp"
+                    android:layout_marginTop="4dp" />
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btn_doip_activate"
+                    style="@style/Widget.GMC.Button.Outlined"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="Connect via Vehicle Wi-Fi (DoIP)"
+                    android:textSize="12sp"
+                    android:layout_marginTop="4dp" />
+
+            </LinearLayout>
+        </com.google.android.material.card.MaterialCardView>
+
+        <!-- Model selection card -->
+        <com.google.android.material.card.MaterialCardView
+            style="@style/Widget.GMC.Card"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="20dp">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:padding="16dp">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="VEHICLE MODEL"
+                    android:textColor="@color/text_hint"
+                    android:textSize="11sp"
+                    android:letterSpacing="0.1"
+                    android:layout_marginBottom="8dp" />
+
+                <RadioGroup
+                    android:id="@+id/model_group"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content">
+
+                    <!-- GMC -->
+                    <TextView android:layout_width="match_parent" android:layout_height="wrap_content"
+                        android:text="GMC" android:textColor="@color/text_hint"
+                        android:textSize="10sp" android:letterSpacing="0.12"
+                        android:paddingStart="8dp" android:paddingTop="4dp" android:paddingBottom="2dp" />
+
+                    <RadioButton android:id="@+id/model_hummer_pickup"
+                        android:layout_width="match_parent" android:layout_height="52dp"
+                        android:text="@string/model_hummer_ev_pickup"
+                        android:textColor="@color/text_primary" android:textSize="15sp"
+                        android:buttonTint="@color/gmc_red" android:paddingStart="8dp" />
+
+                    <RadioButton android:id="@+id/model_hummer_suv"
+                        android:layout_width="match_parent" android:layout_height="52dp"
+                        android:text="@string/model_hummer_ev_suv"
+                        android:textColor="@color/text_primary" android:textSize="15sp"
+                        android:buttonTint="@color/gmc_red" android:paddingStart="8dp" />
+
+                    <RadioButton android:id="@+id/model_sierra_ev"
+                        android:layout_width="match_parent" android:layout_height="52dp"
+                        android:text="@string/model_sierra_ev"
+                        android:textColor="@color/text_primary" android:textSize="15sp"
+                        android:buttonTint="@color/gmc_red" android:paddingStart="8dp" />
+
+                    <RadioButton android:id="@+id/model_terrain_ev"
+                        android:layout_width="match_parent" android:layout_height="52dp"
+                        android:text="@string/model_terrain_ev"
+                        android:textColor="@color/text_primary" android:textSize="15sp"
+                        android:buttonTint="@color/gmc_red" android:paddingStart="8dp" />
+
+                    <!-- Chevrolet -->
+                    <TextView android:layout_width="match_parent" android:layout_height="wrap_content"
+                        android:text="CHEVROLET" android:textColor="@color/text_hint"
+                        android:textSize="10sp" android:letterSpacing="0.12"
+                        android:paddingStart="8dp" android:paddingTop="8dp" android:paddingBottom="2dp" />
+
+                    <RadioButton android:id="@+id/model_silverado_ev"
+                        android:layout_width="match_parent" android:layout_height="52dp"
+                        android:text="@string/model_silverado_ev"
+                        android:textColor="@color/text_primary" android:textSize="15sp"
+                        android:buttonTint="@color/gmc_red" android:paddingStart="8dp" />
+
+                    <RadioButton android:id="@+id/model_blazer_ev"
+                        android:layout_width="match_parent" android:layout_height="52dp"
+                        android:text="@string/model_blazer_ev"
+                        android:textColor="@color/text_primary" android:textSize="15sp"
+                        android:buttonTint="@color/gmc_red" android:paddingStart="8dp" />
+
+                    <RadioButton android:id="@+id/model_equinox_ev"
+                        android:layout_width="match_parent" android:layout_height="52dp"
+                        android:text="@string/model_equinox_ev"
+                        android:textColor="@color/text_primary" android:textSize="15sp"
+                        android:buttonTint="@color/gmc_red" android:paddingStart="8dp" />
+
+                    <!-- Cadillac -->
+                    <TextView android:layout_width="match_parent" android:layout_height="wrap_content"
+                        android:text="CADILLAC" android:textColor="@color/text_hint"
+                        android:textSize="10sp" android:letterSpacing="0.12"
+                        android:paddingStart="8dp" android:paddingTop="8dp" android:paddingBottom="2dp" />
+
+                    <RadioButton android:id="@+id/model_lyriq"
+                        android:layout_width="match_parent" android:layout_height="52dp"
+                        android:text="@string/model_lyriq"
+                        android:textColor="@color/text_primary" android:textSize="15sp"
+                        android:buttonTint="@color/gmc_red" android:paddingStart="8dp" />
+
+                    <RadioButton android:id="@+id/model_optiq"
+                        android:layout_width="match_parent" android:layout_height="52dp"
+                        android:text="@string/model_optiq"
+                        android:textColor="@color/text_primary" android:textSize="15sp"
+                        android:buttonTint="@color/gmc_red" android:paddingStart="8dp" />
+
+                    <RadioButton android:id="@+id/model_vistiq"
+                        android:layout_width="match_parent" android:layout_height="52dp"
+                        android:text="@string/model_vistiq"
+                        android:textColor="@color/text_primary" android:textSize="15sp"
+                        android:buttonTint="@color/gmc_red" android:paddingStart="8dp" />
+
+                    <RadioButton android:id="@+id/model_escalade_iq"
+                        android:layout_width="match_parent" android:layout_height="52dp"
+                        android:text="@string/model_escalade_iq"
+                        android:textColor="@color/text_primary" android:textSize="15sp"
+                        android:buttonTint="@color/gmc_red" android:paddingStart="8dp" />
+
+                </RadioGroup>
+            </LinearLayout>
+        </com.google.android.material.card.MaterialCardView>
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btn_confirm_pair"
+            style="@style/Widget.GMC.Button"
+            android:layout_width="match_parent"
+            android:layout_height="52dp"
+            android:text="Pair This Vehicle"
+            android:enabled="false"
+            android:alpha="0.5" />
+
+    </LinearLayout>
+</androidx.core.widget.NestedScrollView>

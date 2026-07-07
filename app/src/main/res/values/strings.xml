@@ -1,0 +1,148 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">YMGMC</string>
+    <string name="app_full_name">YEDIDIA MOTOR GMC</string>
+
+    <!-- Navigation -->
+    <string name="nav_home">Home</string>
+    <string name="nav_key">Digital Key</string>
+    <string name="nav_charge">Charge</string>
+    <string name="nav_settings">Settings</string>
+
+    <!-- Home -->
+    <string name="action_lock">Lock</string>
+    <string name="action_unlock">Unlock</string>
+    <string name="vehicle_locked">Locked</string>
+    <string name="vehicle_unlocked">Unlocked</string>
+    <string name="vehicle_status_unknown">—</string>
+    <string name="no_vehicle_paired">No vehicle paired.\nTap Digital Key to get started.</string>
+
+    <!-- BLE Status -->
+    <string name="ble_scanning">Scanning for vehicle…</string>
+    <string name="ble_connecting">Connecting…</string>
+    <string name="ble_authenticating">Authenticating…</string>
+    <string name="ble_connected">Connected</string>
+    <string name="ble_ready">Digital Key Ready</string>
+    <string name="ble_disconnected">Not Connected</string>
+    <string name="ble_off">Bluetooth is off</string>
+    <string name="ble_off_action">Enable Bluetooth</string>
+    <string name="ble_permission_denied">Bluetooth permission required</string>
+    <string name="ble_out_of_range">Vehicle out of range</string>
+    <string name="ble_reconnecting">Reconnecting…</string>
+
+    <!-- Digital Key -->
+    <string name="digital_key_active">Digital Key Active</string>
+    <string name="digital_key_inactive">Digital Key Not Paired</string>
+    <string name="pair_vehicle">Pair Vehicle</string>
+    <string name="scan_for_vehicles">Scan for Vehicles</string>
+    <string name="nfc_tap_prompt">Tap your phone to the door handle to unlock</string>
+    <string name="passive_unlock">Walk-up Unlock</string>
+    <string name="passive_unlock_desc">Automatically unlock when you approach and lock when you walk away</string>
+    <string name="passive_unlock_active">Digital Key Active — Walk-up unlock enabled</string>
+    <string name="unpair_vehicle">Remove Vehicle</string>
+    <string name="unpair_confirm">Remove this vehicle from your Digital Key?</string>
+    <string name="select_model">Select Vehicle Model</string>
+
+    <!-- Charge -->
+    <string name="charge_title">Charging</string>
+    <string name="soc_percent">%1$d%%</string>
+    <string name="range_km">%1$d km range</string>
+    <string name="plug_unplugged">Not Plugged In</string>
+    <string name="plug_plugged">Plugged In</string>
+    <string name="plug_charging">Charging</string>
+    <string name="charge_rate_kw">%1$.1f kW</string>
+    <string name="charge_limit">Charge Limit: %1$d%%</string>
+    <string name="charge_schedule">Charge Schedule</string>
+    <string name="charge_schedule_set">Scheduled for %1$02d:%2$02d</string>
+    <string name="charge_full">Fully Charged</string>
+    <string name="charge_low_battery">Low Battery — Please charge soon</string>
+    <string name="stale_data">Last known data</string>
+    <string name="no_ble_for_charge">Connect to vehicle to see live charging data</string>
+
+    <!-- Discovery / Research -->
+    <string name="discovery_title">VEHICLE DISCOVERY</string>
+    <string name="scan_vehicle_qr">Scan Vehicle QR Code</string>
+    <string name="raw_ble_scan">BLE Discovery Scan</string>
+    <string name="raw_ble_scanning">Scanning… (30s)</string>
+    <string name="nearby_devices">NEARBY BLE DEVICES</string>
+
+    <!-- Settings -->
+    <string name="settings_vehicle_name">Vehicle Name</string>
+    <string name="settings_vin">VIN</string>
+    <string name="settings_model">Model</string>
+    <string name="settings_year">Year</string>
+    <string name="settings_nfc_mode">NFC Mode</string>
+    <string name="nfc_mode_hce">Phone as Key Card (HCE)</string>
+    <string name="nfc_mode_tag">Read Door Tag</string>
+
+    <!-- Models — GMC -->
+    <string name="model_hummer_ev_pickup">Hummer EV Pickup</string>
+    <string name="model_hummer_ev_suv">Hummer EV SUV</string>
+    <string name="model_sierra_ev">Sierra EV Denali</string>
+    <string name="model_terrain_ev">Terrain EV</string>
+    <!-- Models — Chevrolet -->
+    <string name="model_silverado_ev">Silverado EV</string>
+    <string name="model_blazer_ev">Blazer EV</string>
+    <string name="model_equinox_ev">Equinox EV</string>
+    <!-- Models — Cadillac -->
+    <string name="model_lyriq">Cadillac LYRIQ</string>
+    <string name="model_optiq">Cadillac OPTIQ</string>
+    <string name="model_vistiq">Cadillac VISTIQ</string>
+    <string name="model_escalade_iq">Cadillac ESCALADE IQ</string>
+
+    <!-- NFC HCE service descriptions -->
+    <string name="hce_service_description">GMC Digital Key</string>
+    <string name="hce_aid_description">GMC Vehicle Access</string>
+
+    <!-- Battery optimization -->
+    <string name="battery_opt_title">Allow Background Operation</string>
+    <string name="battery_opt_msg">To unlock your vehicle when you approach, myGMC needs to run in the background without battery restrictions.</string>
+
+    <!-- OBD2 Activation -->
+    <string name="obd2_activation_title">OBD2 Activation</string>
+    <string name="obd2_scan_prompt">Scan for OBD2 Adapter</string>
+    <string name="obd2_bypass_button">Advanced: Bypass via OBD2 Port</string>
+    <string name="obd2_no_vehicle_hint">No vehicle found? Try OBD2 activation</string>
+    <string name="obd2_success">BLE digital key activated via OBD2</string>
+    <string name="obd2_security_key_needed">Security key required — diagnostic mode available</string>
+    <string name="obd2_diagnostic_dump">Diagnostic Dump (research mode)</string>
+
+    <!-- Dialogs -->
+    <string name="ok">OK</string>
+    <string name="cancel">Cancel</string>
+    <string name="remove">Remove</string>
+    <string name="done">Done</string>
+
+    <!-- Navigation Drawer -->
+    <string name="drawer_header_subtitle">GM Digital Key Tool</string>
+    <string name="drawer_connect_section">Connect &amp; Activate</string>
+    <string name="drawer_obd2">OBD2 BLE / Bluetooth</string>
+    <string name="drawer_doip">Vehicle Wi-Fi (DoIP)</string>
+    <string name="drawer_vehicle_select">Select Vehicle</string>
+    <string name="drawer_controls_section">Vehicle Controls</string>
+    <string name="drawer_digital_key">Digital Key</string>
+    <string name="drawer_unlock">Unlock Doors</string>
+    <string name="drawer_lock">Lock Doors</string>
+    <string name="drawer_start_engine">Start Engine</string>
+    <string name="drawer_start_engine_soon">Start Engine (coming soon)</string>
+    <string name="drawer_coming_soon">(coming soon)</string>
+    <string name="drawer_app_section">App</string>
+    <string name="drawer_charge">Charge Status</string>
+    <string name="drawer_settings">Settings</string>
+    <string name="drawer_connect_first">Connect to vehicle first</string>
+    <string name="drawer_network_inspector">Network Inspector</string>
+
+    <!-- Network Inspector -->
+    <string name="network_inspector_title">NETWORK INSPECTOR</string>
+    <string name="network_inspector_vpn_label">VPN Status</string>
+    <string name="network_inspector_vpn_idle">Idle — tap Start to capture</string>
+    <string name="network_inspector_vpn_active">Active — open myGMC app now</string>
+    <string name="network_inspector_vpn_hint">Routes all traffic through a local VPN. No proxy settings needed.</string>
+    <string name="network_inspector_start">Start</string>
+    <string name="network_inspector_stop">Stop</string>
+    <string name="network_inspector_gm_only">GM only</string>
+    <string name="network_inspector_clear">Clear</string>
+    <string name="network_inspector_no_entries">No requests captured yet</string>
+    <string name="network_inspector_entry_count">%1$d requests</string>
+    <string name="network_inspector_copied">Log copied to clipboard</string>
+</resources>

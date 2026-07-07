@@ -1,0 +1,283 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.core.widget.NestedScrollView
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@color/bg_primary">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:padding="20dp">
+
+        <!-- Header -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:gravity="center_vertical"
+            android:layout_marginBottom="24dp">
+            <ImageView
+                android:layout_width="wrap_content"
+                android:layout_height="36dp"
+                android:src="@drawable/ic_gmc_logo"
+                android:contentDescription="GMC"
+                android:layout_weight="1" />
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="@string/charge_title"
+                android:textColor="@color/text_secondary"
+                android:textSize="14sp" />
+        </LinearLayout>
+
+        <!-- SOC Arc Card -->
+        <com.google.android.material.card.MaterialCardView
+            android:id="@+id/soc_card"
+            style="@style/Widget.GMC.Card"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="16dp">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:gravity="center"
+                android:padding="24dp">
+
+                <!-- SOC percentage big number -->
+                <TextView
+                    android:id="@+id/soc_percent_text"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="—"
+                    android:textColor="@color/text_primary"
+                    android:textSize="72sp"
+                    android:fontFamily="sans-serif-light"
+                    tools:text="87%" />
+
+                <!-- Range estimate -->
+                <TextView
+                    android:id="@+id/range_text"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="—"
+                    android:textColor="@color/text_secondary"
+                    android:textSize="18sp"
+                    android:layout_marginTop="4dp"
+                    tools:text="412 km range" />
+
+                <!-- Stale data badge -->
+                <TextView
+                    android:id="@+id/stale_badge"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="@string/stale_data"
+                    android:textColor="@color/status_warning"
+                    android:textSize="12sp"
+                    android:visibility="gone"
+                    android:layout_marginTop="4dp"
+                    tools:text="Last known data" />
+
+                <!-- Plug status chip -->
+                <com.google.android.material.chip.Chip
+                    android:id="@+id/plug_status_chip"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="16dp"
+                    android:text="@string/plug_unplugged"
+                    android:textColor="@color/text_secondary"
+                    app:chipBackgroundColor="@color/bg_elevated"
+                    app:chipStrokeColor="@color/divider"
+                    app:chipStrokeWidth="1dp"
+                    tools:text="Charging" />
+
+                <!-- Charge rate -->
+                <TextView
+                    android:id="@+id/charge_rate_text"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:textColor="@color/status_charging"
+                    android:textSize="16sp"
+                    android:visibility="gone"
+                    android:layout_marginTop="4dp"
+                    tools:text="11.5 kW" />
+
+                <!-- Low battery warning -->
+                <TextView
+                    android:id="@+id/low_battery_warning"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="@string/charge_low_battery"
+                    android:textColor="@color/status_error"
+                    android:textSize="14sp"
+                    android:gravity="center"
+                    android:visibility="gone"
+                    android:layout_marginTop="8dp"
+                    tools:text="Low Battery" />
+
+            </LinearLayout>
+        </com.google.android.material.card.MaterialCardView>
+
+        <!-- Charge Limit Card -->
+        <com.google.android.material.card.MaterialCardView
+            android:id="@+id/charge_limit_card"
+            style="@style/Widget.GMC.Card"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="16dp">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:padding="16dp">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:gravity="center_vertical"
+                    android:layout_marginBottom="8dp">
+                    <TextView
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:text="Charge Limit"
+                        android:textColor="@color/text_primary"
+                        android:textSize="16sp" />
+                    <TextView
+                        android:id="@+id/charge_limit_label"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="90%"
+                        android:textColor="@color/gmc_red"
+                        android:textSize="16sp"
+                        android:fontFamily="sans-serif-medium" />
+                </LinearLayout>
+
+                <SeekBar
+                    android:id="@+id/charge_limit_seekbar"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:max="80"
+                    android:progress="70"
+                    android:progressTint="@color/gmc_red"
+                    android:thumbTint="@color/gmc_red" />
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal">
+                    <TextView
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:text="20%"
+                        android:textColor="@color/text_hint"
+                        android:textSize="11sp" />
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="100%"
+                        android:textColor="@color/text_hint"
+                        android:textSize="11sp" />
+                </LinearLayout>
+
+            </LinearLayout>
+        </com.google.android.material.card.MaterialCardView>
+
+        <!-- Charge Schedule Card -->
+        <com.google.android.material.card.MaterialCardView
+            android:id="@+id/schedule_card"
+            style="@style/Widget.GMC.Card"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="16dp">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:padding="16dp">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:gravity="center_vertical">
+
+                    <LinearLayout
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:orientation="vertical">
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="@string/charge_schedule"
+                            android:textColor="@color/text_primary"
+                            android:textSize="16sp" />
+                        <TextView
+                            android:id="@+id/schedule_time_label"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="Not scheduled"
+                            android:textColor="@color/text_secondary"
+                            android:textSize="13sp"
+                            android:layout_marginTop="2dp" />
+                    </LinearLayout>
+
+                    <com.google.android.material.switchmaterial.SwitchMaterial
+                        android:id="@+id/schedule_switch"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:checked="false" />
+                </LinearLayout>
+
+                <LinearLayout
+                    android:id="@+id/schedule_time_picker_row"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:gravity="center_vertical"
+                    android:layout_marginTop="12dp"
+                    android:visibility="gone">
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="Start charging at"
+                        android:textColor="@color/text_secondary"
+                        android:textSize="14sp"
+                        android:layout_marginEnd="12dp" />
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/btn_pick_time"
+                        style="@style/Widget.GMC.Button.Outlined"
+                        android:layout_width="wrap_content"
+                        android:layout_height="40dp"
+                        android:text="22:00"
+                        android:textSize="16sp" />
+                </LinearLayout>
+            </LinearLayout>
+        </com.google.android.material.card.MaterialCardView>
+
+        <!-- No BLE warning -->
+        <TextView
+            android:id="@+id/no_ble_warning"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="@string/no_ble_for_charge"
+            android:textColor="@color/text_secondary"
+            android:textSize="14sp"
+            android:gravity="center"
+            android:padding="8dp"
+            android:visibility="gone" />
+
+    </LinearLayout>
+</androidx.core.widget.NestedScrollView>

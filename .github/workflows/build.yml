@@ -1,0 +1,92 @@
+name: Android Build
+
+on:
+  push:
+    branches: [ "claude/remove-remote-control-nghwd", "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+jobs:
+  build:
+    name: Build & Test
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+
+      - name: Setup Android SDK
+        run: |
+          echo "sdk.dir=$ANDROID_HOME" > local.properties
+          yes | "${ANDROID_HOME}/cmdline-tools/latest/bin/sdkmanager" --licenses \
+            > /dev/null 2>&1 || true
+          "${ANDROID_HOME}/cmdline-tools/latest/bin/sdkmanager" \
+            "platforms;android-34" "build-tools;34.0.0" || true
+
+      - name: Make gradlew executable
+        run: chmod +x gradlew
+
+      - name: KSP / Room annotation processing
+        id: ksp
+        run: ./gradlew kspDebugKotlin -PbuildNumber=${{ github.run_number }} --no-daemon --stacktrace 2>&1 | tee ksp.log; exit ${PIPESTATUS[0]}
+        continue-on-error: true
+
+      - name: Print KSP errors
+        if: steps.ksp.outcome == 'failure'
+        run: |
+          echo "=== KSP FAILED — errors below ==="
+          grep -E "^e: |error:|ERROR|Exception|FAILED" ksp.log | head -80 || true
+          echo "=== LAST 60 LINES ==="
+          tail -60 ksp.log
+
+      - name: Compile Kotlin
+        id: kotlinc
+        run: ./gradlew compileDebugKotlin -PbuildNumber=${{ github.run_number }} --no-daemon --stacktrace 2>&1 | tee kotlinc.log; exit ${PIPESTATUS[0]}
+        continue-on-error: true
+
+      - name: Print Kotlin compiler errors
+        if: steps.kotlinc.outcome == 'failure'
+        run: |
+          echo "=== KOTLIN COMPILE FAILED — errors below ==="
+          grep -E "^e: |error:|ERROR|Exception|FAILED|unresolved|None of the following" kotlinc.log | head -80 || true
+          echo "=== LAST 60 LINES ==="
+          tail -60 kotlinc.log
+
+      - name: Build Debug APK
+        id: build
+        run: ./gradlew assembleDebug -PbuildNumber=${{ github.run_number }} --no-daemon --stacktrace 2>&1 | tee build.log; exit ${PIPESTATUS[0]}
+
+      - name: Print build errors on failure
+        if: failure() && steps.build.outcome == 'failure'
+        run: |
+          echo "=== BUILD FAILED — compiler errors ==="
+          grep -E "^e: |error: |ERROR|Unresolved reference|None of the following|overload resolution" build.log | head -80 || true
+          echo "=== LAST 80 LINES ==="
+          tail -80 build.log
+
+      - name: Run unit tests
+        run: ./gradlew testDebugUnitTest --no-daemon --stacktrace
+        continue-on-error: true
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        if: success()
+        with:
+          name: app-debug
+          path: app/build/outputs/apk/debug/app-debug.apk
+          retention-days: 7
+
+      - name: Upload logs on failure
+        uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: build-logs
+          path: |
+            build.log
+            ksp.log
+            kotlinc.log
+          retention-days: 7

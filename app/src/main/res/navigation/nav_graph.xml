@@ -1,0 +1,154 @@
+<?xml version="1.0" encoding="utf-8"?>
+<navigation xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:id="@+id/nav_graph"
+    app:startDestination="@id/homeFragment">
+
+    <!-- Global actions accessible from anywhere in the nav graph -->
+    <action
+        android:id="@+id/action_global_obd2"
+        app:destination="@id/obd2ActivationFragment"
+        app:launchSingleTop="true"
+        app:popUpTo="@id/homeFragment"
+        app:popUpToInclusive="false" />
+    <action
+        android:id="@+id/action_global_doip"
+        app:destination="@id/doipActivationFragment"
+        app:launchSingleTop="true"
+        app:popUpTo="@id/homeFragment"
+        app:popUpToInclusive="false" />
+    <action
+        android:id="@+id/action_global_vehicle_select"
+        app:destination="@id/vehicleSelectFragment"
+        app:launchSingleTop="true"
+        app:popUpTo="@id/homeFragment"
+        app:popUpToInclusive="false" />
+    <action
+        android:id="@+id/action_global_digital_key"
+        app:destination="@id/digitalKeyFragment"
+        app:launchSingleTop="true"
+        app:popUpTo="@id/homeFragment"
+        app:popUpToInclusive="false" />
+    <action
+        android:id="@+id/action_global_charge"
+        app:destination="@id/chargeFragment"
+        app:launchSingleTop="true"
+        app:popUpTo="@id/homeFragment"
+        app:popUpToInclusive="false" />
+    <action
+        android:id="@+id/action_global_settings"
+        app:destination="@id/settingsFragment"
+        app:launchSingleTop="true"
+        app:popUpTo="@id/homeFragment"
+        app:popUpToInclusive="false" />
+    <action
+        android:id="@+id/action_global_home"
+        app:destination="@id/homeFragment"
+        app:launchSingleTop="true"
+        app:popUpTo="@id/homeFragment"
+        app:popUpToInclusive="true" />
+    <action
+        android:id="@+id/action_global_network_inspector"
+        app:destination="@id/networkInspectorFragment"
+        app:launchSingleTop="true"
+        app:popUpTo="@id/homeFragment"
+        app:popUpToInclusive="false" />
+    <action
+        android:id="@+id/action_global_nfc_analyzer"
+        app:destination="@id/nfcTagAnalyzerFragment"
+        app:launchSingleTop="true"
+        app:popUpTo="@id/homeFragment"
+        app:popUpToInclusive="false" />
+
+    <fragment
+        android:id="@+id/homeFragment"
+        android:name="com.gmc.digitalkey.ui.home.HomeFragment"
+        android:label="@string/nav_home" />
+
+    <fragment
+        android:id="@+id/digitalKeyFragment"
+        android:name="com.gmc.digitalkey.ui.key.DigitalKeyFragment"
+        android:label="@string/nav_key">
+        <action
+            android:id="@+id/action_key_to_vehicle_select"
+            app:destination="@id/vehicleSelectFragment" />
+    </fragment>
+
+    <fragment
+        android:id="@+id/chargeFragment"
+        android:name="com.gmc.digitalkey.ui.charge.ChargeFragment"
+        android:label="@string/nav_charge" />
+
+    <fragment
+        android:id="@+id/settingsFragment"
+        android:name="com.gmc.digitalkey.ui.settings.SettingsFragment"
+        android:label="@string/nav_settings" />
+
+    <fragment
+        android:id="@+id/vehicleSelectFragment"
+        android:name="com.gmc.digitalkey.ui.settings.VehicleSelectFragment"
+        android:label="@string/select_model">
+        <action
+            android:id="@+id/action_vehicle_select_to_obd2"
+            app:destination="@id/obd2ActivationFragment" />
+        <action
+            android:id="@+id/action_vehicle_select_to_doip"
+            app:destination="@id/doipActivationFragment" />
+    </fragment>
+
+    <fragment
+        android:id="@+id/setupGuideFragment"
+        android:name="com.gmc.digitalkey.ui.setup.SetupGuideFragment"
+        android:label="Activate Digital Key">
+        <action
+            android:id="@+id/action_setup_to_obd2"
+            app:destination="@id/obd2ActivationFragment" />
+    </fragment>
+
+    <fragment
+        android:id="@+id/obd2ActivationFragment"
+        android:name="com.gmc.digitalkey.ui.activation.Obd2ActivationFragment"
+        android:label="OBD2 Activation">
+        <argument
+            android:name="vehicleId"
+            app:argType="string"
+            app:nullable="true"
+            android:defaultValue="@null" />
+        <argument
+            android:name="modelKey"
+            app:argType="string"
+            app:nullable="true"
+            android:defaultValue="@null" />
+        <action
+            android:id="@+id/action_obd2_to_vehicle_select"
+            app:destination="@id/vehicleSelectFragment" />
+        <action
+            android:id="@+id/action_obd2_to_doip"
+            app:destination="@id/doipActivationFragment" />
+    </fragment>
+
+    <fragment
+        android:id="@+id/doipActivationFragment"
+        android:name="com.gmc.digitalkey.ui.activation.DoIpActivationFragment"
+        android:label="DoIP Wi-Fi Activation">
+        <argument
+            android:name="vehicleId"
+            app:argType="string"
+            app:nullable="true"
+            android:defaultValue="@null" />
+        <action
+            android:id="@+id/action_doip_to_vehicle_select"
+            app:destination="@id/vehicleSelectFragment" />
+    </fragment>
+
+    <fragment
+        android:id="@+id/networkInspectorFragment"
+        android:name="com.gmc.digitalkey.ui.research.NetworkInspectorFragment"
+        android:label="@string/network_inspector_title" />
+
+    <fragment
+        android:id="@+id/nfcTagAnalyzerFragment"
+        android:name="com.gmc.digitalkey.ui.nfc.NfcTagAnalyzerFragment"
+        android:label="NFC Tag Analyzer" />
+
+</navigation>

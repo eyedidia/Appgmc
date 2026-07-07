@@ -1,0 +1,224 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.core.widget.NestedScrollView
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@color/bg_primary">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:padding="20dp">
+
+        <ImageView
+            android:layout_width="wrap_content"
+            android:layout_height="36dp"
+            android:src="@drawable/ic_gmc_logo"
+            android:contentDescription="GMC"
+            android:layout_marginBottom="24dp" />
+
+        <!-- Vehicle Info Card -->
+        <com.google.android.material.card.MaterialCardView
+            android:id="@+id/vehicle_info_card"
+            style="@style/Widget.GMC.Card"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="16dp">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:padding="16dp">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="VEHICLE"
+                    android:textColor="@color/text_hint"
+                    android:textSize="11sp"
+                    android:letterSpacing="0.15"
+                    android:layout_marginBottom="12dp" />
+
+                <!-- Name row -->
+                <LinearLayout android:layout_width="match_parent" android:layout_height="48dp"
+                    android:orientation="horizontal" android:gravity="center_vertical">
+                    <TextView android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1"
+                        android:text="@string/settings_vehicle_name" android:textColor="@color/text_secondary" android:textSize="14sp" />
+                    <TextView android:id="@+id/vehicle_name_value" android:layout_width="0dp"
+                        android:layout_height="wrap_content" android:layout_weight="1"
+                        android:text="—" android:textColor="@color/text_primary" android:textSize="14sp"
+                        android:gravity="end" android:ellipsize="end" android:maxLines="1" />
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/btn_edit_name"
+                        style="@style/Widget.MaterialComponents.Button.TextButton"
+                        android:layout_width="36dp"
+                        android:layout_height="36dp"
+                        android:padding="0dp"
+                        android:insetTop="0dp"
+                        android:insetBottom="0dp"
+                        app:icon="@drawable/ic_edit"
+                        app:iconSize="18dp"
+                        app:iconGravity="textStart"
+                        app:iconPadding="0dp"
+                        app:iconTint="@color/text_hint" />
+                </LinearLayout>
+
+                <View android:layout_width="match_parent" android:layout_height="1dp" android:background="@color/divider" />
+
+                <!-- Model row -->
+                <LinearLayout android:layout_width="match_parent" android:layout_height="48dp"
+                    android:orientation="horizontal" android:gravity="center_vertical">
+                    <TextView android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1"
+                        android:text="@string/settings_model" android:textColor="@color/text_secondary" android:textSize="14sp" />
+                    <TextView android:id="@+id/vehicle_model_value" android:layout_width="wrap_content"
+                        android:layout_height="wrap_content" android:text="—" android:textColor="@color/text_primary" android:textSize="14sp" />
+                </LinearLayout>
+
+                <View android:layout_width="match_parent" android:layout_height="1dp" android:background="@color/divider" />
+
+                <!-- VIN row -->
+                <LinearLayout android:layout_width="match_parent" android:layout_height="48dp"
+                    android:orientation="horizontal" android:gravity="center_vertical">
+                    <TextView android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1"
+                        android:text="@string/settings_vin" android:textColor="@color/text_secondary" android:textSize="14sp" />
+                    <TextView android:id="@+id/vehicle_vin_value" android:layout_width="0dp"
+                        android:layout_height="wrap_content" android:layout_weight="1"
+                        android:text="—" android:textColor="@color/text_primary" android:textSize="14sp"
+                        android:gravity="end" android:ellipsize="end" android:maxLines="1"
+                        android:fontFamily="monospace" />
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/btn_edit_vin"
+                        style="@style/Widget.MaterialComponents.Button.TextButton"
+                        android:layout_width="36dp"
+                        android:layout_height="36dp"
+                        android:padding="0dp"
+                        android:insetTop="0dp"
+                        android:insetBottom="0dp"
+                        android:visibility="gone"
+                        app:icon="@drawable/ic_edit"
+                        app:iconSize="18dp"
+                        app:iconGravity="textStart"
+                        app:iconPadding="0dp"
+                        app:iconTint="@color/text_hint" />
+                </LinearLayout>
+
+                <View android:layout_width="match_parent" android:layout_height="1dp" android:background="@color/divider" />
+
+                <!-- Remove vehicle row -->
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btn_remove_vehicle"
+                    style="@style/Widget.MaterialComponents.Button.TextButton"
+                    android:layout_width="wrap_content"
+                    android:layout_height="48dp"
+                    android:text="Remove This Vehicle"
+                    android:textColor="@color/status_error"
+                    android:visibility="gone" />
+
+            </LinearLayout>
+        </com.google.android.material.card.MaterialCardView>
+
+        <!-- NFC Mode Card -->
+        <com.google.android.material.card.MaterialCardView
+            android:id="@+id/nfc_mode_card"
+            style="@style/Widget.GMC.Card"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="16dp">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:padding="16dp">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="NFC MODE"
+                    android:textColor="@color/text_hint"
+                    android:textSize="11sp"
+                    android:letterSpacing="0.15"
+                    android:layout_marginBottom="12dp" />
+
+                <RadioGroup android:id="@+id/nfc_mode_group"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content">
+
+                    <RadioButton android:id="@+id/nfc_hce_radio"
+                        android:layout_width="match_parent"
+                        android:layout_height="48dp"
+                        android:text="@string/nfc_mode_hce"
+                        android:textColor="@color/text_primary"
+                        android:checked="true"
+                        android:buttonTint="@color/gmc_red" />
+
+                    <RadioButton android:id="@+id/nfc_tag_radio"
+                        android:layout_width="match_parent"
+                        android:layout_height="48dp"
+                        android:text="@string/nfc_mode_tag"
+                        android:textColor="@color/text_primary"
+                        android:buttonTint="@color/gmc_red" />
+
+                </RadioGroup>
+            </LinearLayout>
+        </com.google.android.material.card.MaterialCardView>
+
+        <!-- Passive Unlock Card -->
+        <com.google.android.material.card.MaterialCardView
+            android:id="@+id/passive_unlock_card"
+            style="@style/Widget.GMC.Card"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="16dp">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:padding="16dp"
+                android:gravity="center_vertical">
+
+                <LinearLayout
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:orientation="vertical">
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="@string/passive_unlock"
+                        android:textColor="@color/text_primary"
+                        android:textSize="16sp" />
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="@string/passive_unlock_desc"
+                        android:textColor="@color/text_secondary"
+                        android:textSize="12sp"
+                        android:layout_marginTop="2dp" />
+                </LinearLayout>
+
+                <com.google.android.material.switchmaterial.SwitchMaterial
+                    android:id="@+id/passive_unlock_switch"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:checked="false" />
+
+            </LinearLayout>
+        </com.google.android.material.card.MaterialCardView>
+
+        <!-- App info -->
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="myGMC Digital Key • Local mode\nNo server connection required"
+            android:textColor="@color/text_hint"
+            android:textSize="12sp"
+            android:gravity="center"
+            android:layout_marginTop="16dp" />
+
+    </LinearLayout>
+</androidx.core.widget.NestedScrollView>

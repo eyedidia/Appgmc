@@ -1,0 +1,30 @@
+package com.gmc.digitalkey.db
+
+import androidx.room.Entity
+import androidx.room.PrimaryKey
+
+@Entity(tableName = "vehicles")
+data class VehicleEntity(
+    @PrimaryKey val id: String,
+    val displayName: String,
+    val modelKey: String,       // e.g. "hummer_ev_pickup", "sierra_ev"
+    val year: Int,
+    val bleAddress: String,
+    val vin: String,                 // full 17-char VIN (empty if not provided at pairing)
+    val imageUrl: String = "",       // Wikipedia thumbnail URL (empty = use local drawable)
+    val publicKeyBytes: ByteArray,
+    val pairedAt: Long = System.currentTimeMillis(),
+    val passiveUnlockEnabled: Boolean = false,
+    val lastKnownSoc: Int = -1,
+    val lastKnownRangeKm: Int = -1,
+    val lastSeenAt: Long = 0L,
+    val activationMethod: String = "onstar" // "onstar" | "obd2" | "unknown"
+) {
+    override fun equals(other: Any?): Boolean {
+        if (this === other) return true
+        if (other !is VehicleEntity) return false
+        return id == other.id
+    }
+
+    override fun hashCode(): Int = id.hashCode()
+}

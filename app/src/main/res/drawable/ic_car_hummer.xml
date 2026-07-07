@@ -1,0 +1,53 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="320dp"
+    android:height="120dp"
+    android:viewportWidth="320"
+    android:viewportHeight="120">
+
+    <!-- Body -->
+    <path
+        android:fillColor="#2A2A2A"
+        android:pathData="M20,80 L20,60 L40,40 L100,35 L140,30 L200,30 L240,40 L280,50 L300,60 L300,80 Z"/>
+
+    <!-- Cab roof -->
+    <path
+        android:fillColor="#333333"
+        android:pathData="M80,40 L85,25 L200,25 L220,40 Z"/>
+
+    <!-- Wheel 1 outer (cx=70, cy=82, r=18) -->
+    <path
+        android:fillColor="#1A1A1A"
+        android:pathData="M52,82 A18,18 0 1 0 88,82 A18,18 0 1 0 52,82 Z"/>
+
+    <!-- Wheel 1 inner (cx=70, cy=82, r=10) -->
+    <path
+        android:fillColor="#444444"
+        android:pathData="M60,82 A10,10 0 1 0 80,82 A10,10 0 1 0 60,82 Z"/>
+
+    <!-- Wheel 2 outer (cx=245, cy=82, r=18) -->
+    <path
+        android:fillColor="#1A1A1A"
+        android:pathData="M227,82 A18,18 0 1 0 263,82 A18,18 0 1 0 227,82 Z"/>
+
+    <!-- Wheel 2 inner (cx=245, cy=82, r=10) -->
+    <path
+        android:fillColor="#444444"
+        android:pathData="M235,82 A10,10 0 1 0 255,82 A10,10 0 1 0 235,82 Z"/>
+
+    <!-- Headlight (rect x=282,y=55,w=14,h=6,rx=2) -->
+    <path
+        android:fillColor="@color/gmc_red"
+        android:pathData="M284,55 L294,55 Q296,55 296,57 L296,59 Q296,61 294,61 L284,61 Q282,61 282,59 L282,57 Q282,55 284,55 Z"/>
+
+    <!-- Taillight (rect x=24,y=60,w=10,h=8,rx=2) -->
+    <path
+        android:fillColor="@color/gmc_red"
+        android:pathData="M26,60 L32,60 Q34,60 34,62 L34,66 Q34,68 32,68 L26,68 Q24,68 24,66 L24,62 Q24,60 26,60 Z"/>
+
+    <!-- Charge port indicator (cx=160, cy=50, r=4) -->
+    <path
+        android:fillColor="@color/status_charging"
+        android:pathData="M156,50 A4,4 0 1 0 164,50 A4,4 0 1 0 156,50 Z"/>
+
+</vector>
